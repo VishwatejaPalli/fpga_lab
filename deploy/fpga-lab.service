@@ -1,0 +1,34 @@
+[Unit]
+Description=FPGA Lab Remote Access Server
+Documentation=https://github.com/your-org/fpga-lab
+After=network.target
+
+[Service]
+Type=simple
+User=fpga-lab
+Group=fpga-lab
+WorkingDirectory=/opt/fpga-lab
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Environment
+Environment=NODE_ENV=production
+Environment=APP_PORT=3000
+EnvironmentFile=/opt/fpga-lab/.env.local
+
+# Security hardening
+NoNewPrivileges=false
+ProtectSystem=strict
+ReadWritePaths=/opt/fpga-lab/data /opt/fpga-lab/uploads /opt/fpga-lab/.next
+
+# Hardware access — required for FPGA JTAG cables, serial ports, and cameras
+SupplementaryGroups=dialout video plugdev
+
+# Resource limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
