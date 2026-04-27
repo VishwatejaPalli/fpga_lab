@@ -25,6 +25,15 @@ export default function BoardCard({ board, onSelect }: BoardCardProps) {
       className="card cursor-pointer transition-all hover:shadow-lg active:scale-[0.98] touch-manipulation"
       onClick={() => onSelect?.(board.id)}
     >
+      {/* FPGA board image */}
+      <div className="mb-4 -mx-6 -mt-6 rounded-t-xl overflow-hidden border-b border-border">
+        <img
+          src="/fpga-board.svg"
+          alt={`${board.name} FPGA board`}
+          className="w-full h-32 object-cover"
+        />
+      </div>
+
       <div className="flex items-start justify-between mb-3">
         <div>
           <h3 className="font-semibold text-lg">{board.name}</h3>

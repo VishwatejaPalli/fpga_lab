@@ -24,26 +24,38 @@ export default function HomePage() {
 
       {/* Hero */}
       <main className="flex-1 flex flex-col items-center justify-center px-6 text-center">
-        <div className="max-w-3xl">
-          <h1 className="text-5xl font-bold mb-6 leading-tight">
-            Program FPGAs
-            <br />
-            <span className="text-primary">from anywhere</span>
-          </h1>
-          <p className="text-xl text-muted mb-10 max-w-xl mx-auto">
-            Upload your bitstream, program real FPGA hardware, and monitor
-            outputs — all through your web browser. No lab visit required.
-          </p>
-          <div className="flex gap-4 justify-center">
-            <Link href="/auth/signup" className="btn-primary text-lg px-8 py-3">
-              Get Started
-            </Link>
-            <Link
-              href="/auth/login"
-              className="text-lg px-8 py-3 border border-border rounded-lg hover:border-primary transition-colors"
-            >
-              Log in
-            </Link>
+        <div className="max-w-5xl w-full flex flex-col md:flex-row items-center gap-10 md:gap-16 md:text-left">
+          {/* Text */}
+          <div className="flex-1">
+            <h1 className="text-5xl font-bold mb-6 leading-tight">
+              Program FPGAs
+              <br />
+              <span className="text-primary">from anywhere</span>
+            </h1>
+            <p className="text-xl text-muted mb-10 max-w-xl md:mx-0 mx-auto">
+              Upload your bitstream, program real FPGA hardware, and monitor
+              outputs — all through your web browser. No lab visit required.
+            </p>
+            <div className="flex gap-4 md:justify-start justify-center">
+              <Link href="/auth/signup" className="btn-primary text-lg px-8 py-3">
+                Get Started
+              </Link>
+              <Link
+                href="/auth/login"
+                className="text-lg px-8 py-3 border border-border rounded-lg hover:border-primary transition-colors"
+              >
+                Log in
+              </Link>
+            </div>
+          </div>
+          {/* FPGA Board Visual Aid */}
+          <div className="flex-1 flex flex-col items-center gap-3">
+            <img
+              src="/fpga-board.svg"
+              alt="FPGA development board"
+              className="w-full max-w-sm rounded-xl shadow-lg border border-border"
+            />
+            <p className="text-xs text-muted">Artix-7 FPGA Development Board</p>
           </div>
         </div>
 
