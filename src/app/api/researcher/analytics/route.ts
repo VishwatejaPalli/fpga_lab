@@ -3,6 +3,19 @@ import { sqlite } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { getRoleConfig } from "@/lib/roles";
 
+interface SessionStatsRow {
+  total_sessions: number;
+  avg_minutes: number | null;
+  total_hours: number | null;
+}
+
+interface SummaryRow {
+  total_jobs: number;
+  success_jobs: number;
+  failed_jobs: number;
+  boards_used: number;
+}
+
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -56,7 +69,7 @@ export async function GET(req: NextRequest) {
       FROM hw_sessions
       WHERE user_id = ? AND started_at > datetime('now', ?)`
     )
-    .get(session.userId, `-${days} days`) as any;
+    .get(session.userId, `-${days} days`) as SessionStatsRow | undefined;
 
   // Weekly success rate
   const weeklyRate = sqlite
@@ -89,18 +102,23 @@ export async function GET(req: NextRequest) {
         COUNT(DISTINCT board_id) as boards_used
       FROM jobs WHERE user_id = ? AND created_at > datetime('now', ?)`
     )
-    .get(session.userId, `-${days} days`) as any;
+    .get(session.userId, `-${days} days`) as SummaryRow | undefined;
+
+  const totalJobs = summary?.total_jobs ?? 0;
+  const successJobs = summary?.success_jobs ?? 0;
+  const failedJobs = summary?.failed_jobs ?? 0;
+  const boardsUsed = summary?.boards_used ?? 0;
 
   return NextResponse.json({
     period: { days },
     summary: {
-      totalJobs: summary?.total_jobs || 0,
-      successJobs: summary?.success_jobs || 0,
-      failedJobs: summary?.failed_jobs || 0,
-      boardsUsed: summary?.boards_used || 0,
+      totalJobs,
+      successJobs,
+      failedJobs,
+      boardsUsed,
       successRate:
-        summary?.total_jobs > 0
-          ? Math.round((summary.success_jobs / summary.total_jobs) * 1000) / 10
+        totalJobs > 0
+          ? Math.round((successJobs / totalJobs) * 1000) / 10
           : 0,
       totalSessions: sessions?.total_sessions || 0,
       avgSessionMinutes: Math.round(sessions?.avg_minutes || 0),

@@ -22,11 +22,18 @@ class CameraService extends EventEmitter {
       return;
     }
 
+    const isWindows = process.platform === "win32";
+    const inputFormat = isWindows ? "dshow" : "v4l2";
+    // DirectShow requires video= prefix on Windows
+    const inputDevice = isWindows && !cameraDevice.startsWith("video=")
+      ? `video=${cameraDevice}`
+      : cameraDevice;
+
     const ffmpeg = spawn("ffmpeg", [
       "-f",
-      "v4l2",
+      inputFormat,
       "-i",
-      cameraDevice,
+      inputDevice,
       "-f",
       "mjpeg",
       "-q:v",
@@ -40,17 +47,49 @@ class CameraService extends EventEmitter {
 
     const clients = new Set<(chunk: Buffer) => void>();
 
+    // Buffer to reconstruct full JPEG frames (SOI 0xFFD8 to EOI 0xFFD9)
+    let buffer = Buffer.alloc(0);
+
     ffmpeg.stdout.on("data", (chunk: Buffer) => {
-      for (const client of clients) {
-        try {
-          client(chunk);
-        } catch {
-          clients.delete(client);
+      buffer = Buffer.concat([buffer, chunk]);
+
+      while (true) {
+        const startIndex = buffer.indexOf(Buffer.from([0xff, 0xd8]));
+        if (startIndex === -1) {
+          // If no SOI is found, discard the buffer except the last byte (in case it is part of 0xffd8)
+          if (buffer.length > 1) {
+            buffer = buffer.subarray(buffer.length - 1);
+          }
+          break;
+        }
+
+        // Align buffer to the start of the JPEG image
+        if (startIndex > 0) {
+          buffer = buffer.subarray(startIndex);
+        }
+
+        const endIndex = buffer.indexOf(Buffer.from([0xff, 0xd9]), 2);
+        if (endIndex === -1) {
+          // Waiting for more chunks to finish the frame
+          break;
+        }
+
+        // Extract complete frame
+        const frame = buffer.subarray(0, endIndex + 2);
+        buffer = buffer.subarray(endIndex + 2);
+
+        // Broadcast the frame to all subscribed clients
+        for (const client of clients) {
+          try {
+            client(frame);
+          } catch {
+            clients.delete(client);
+          }
         }
       }
     });
 
-    ffmpeg.stderr.on("data", (_data: Buffer) => {
+    ffmpeg.stderr.on("data", () => {
       // ffmpeg logs to stderr, ignore in production
     });
 
@@ -78,6 +117,10 @@ class CameraService extends EventEmitter {
     stream.clients.add(callback);
     return () => {
       stream.clients.delete(callback);
+      // Auto-stop the stream if no subscribers left
+      if (stream.clients.size === 0) {
+        this.stop(boardId);
+      }
     };
   }
 

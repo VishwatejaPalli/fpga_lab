@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
 
 :root {
   --background: #f0f4f8;
@@ -63,7 +64,10 @@ body {
   font-weight: 600;
   border: none;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: transform 0.2s cubic-bezier(0.2, 0.6, 0.2, 1),
+    background-color 0.25s ease,
+    box-shadow 0.25s ease,
+    color 0.25s ease;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-size: 0.875rem;
@@ -82,7 +86,10 @@ body {
   font-weight: 600;
   border: 2px solid var(--primary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: transform 0.2s cubic-bezier(0.2, 0.6, 0.2, 1),
+    background-color 0.25s ease,
+    border-color 0.25s ease,
+    color 0.25s ease;
   font-size: 0.875rem;
   min-height: 44px;
   touch-action: manipulation;
@@ -98,7 +105,9 @@ body {
   font-weight: 600;
   border: none;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: transform 0.2s cubic-bezier(0.2, 0.6, 0.2, 1),
+    opacity 0.25s ease,
+    box-shadow 0.25s ease;
   font-size: 0.875rem;
   min-height: 44px;
   touch-action: manipulation;
@@ -115,13 +124,29 @@ body {
   color: var(--foreground);
   font-size: 1rem;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, background-color 0.25s ease;
   min-height: 44px;
   -webkit-appearance: none;
   appearance: none;
 }
 .input-field:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(44, 62, 107, 0.1); }
 .input-field::placeholder { color: var(--muted); }
+
+select.input-field {
+  padding-right: 2.5rem;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 1.2rem) 50%,
+    calc(100% - 0.95rem) 50%;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+
+select.input-field:hover {
+  border-color: var(--accent);
+}
 
 /* Prevent iOS zoom on input focus (font-size >= 16px does this) */
 @media (max-width: 767px) {
@@ -135,7 +160,9 @@ body {
   border-radius: 0.75rem;
   padding: 1.5rem;
   box-shadow: var(--shadow);
-  transition: all 0.2s;
+  transition: transform 0.25s cubic-bezier(0.2, 0.6, 0.2, 1),
+    box-shadow 0.3s ease,
+    border-color 0.25s ease;
 }
 .card:hover { box-shadow: var(--shadow-lg); border-color: var(--accent); }
 
@@ -148,6 +175,15 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 .badge-free { background: rgba(22, 163, 74, 0.1); color: var(--success); }
 .badge-busy { background: rgba(217, 119, 6, 0.1); color: var(--warning); }

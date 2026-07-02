@@ -21,3 +21,13 @@ sqlite.pragma("foreign_keys = ON");
 export const db = drizzle(sqlite, { schema });
 export { sqlite };
 export default db;
+
+// Guarantee initialization runs automatically when database is imported
+if (typeof window === "undefined") {
+  import("../init").then(({ ensureInit }) => {
+    ensureInit();
+  }).catch((err) => {
+    console.error("[DB] Failed to auto-initialize server:", err);
+  });
+}
+

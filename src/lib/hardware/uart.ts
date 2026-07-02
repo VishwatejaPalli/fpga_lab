@@ -1,4 +1,7 @@
 import { EventEmitter } from "events";
+import { eq } from "drizzle-orm";
+import db from "@/lib/db";
+import { boards } from "@/lib/db/schema";
 
 /**
  * UART Service — manages serial port connections to FPGA boards.
@@ -12,26 +15,36 @@ class UARTService extends EventEmitter {
   private ports = new Map<
     string,
     {
-      port: unknown;
-      parser: unknown;
+      port: any;
     }
   >();
 
   /**
    * Open a serial connection for a board.
    */
-  async open(boardId: string, serialPortPath: string, baudRate = 115200) {
+  async open(boardId: string, baudRate = 115200) {
     if (this.ports.has(boardId)) {
       console.log(`[UART] Port already open for board ${boardId}`);
       return;
     }
 
+    const board = db
+      .select()
+      .from(boards)
+      .where(eq(boards.id, boardId))
+      .get();
+
+    if (!board || !board.serialPort) {
+      console.warn(`[UART] Serial port not configured/found for board ${boardId}`);
+      return;
+    }
+
+    const serialPortPath = board.serialPort;
+
     try {
       // Use eval-require to prevent Turbopack from trying to resolve native modules at build time
-      // eslint-disable-next-line no-eval
       const _require = eval("require") as NodeRequire;
       const { SerialPort } = _require("serialport");
-      const { ReadlineParser } = _require("@serialport/parser-readline");
 
       const port = new SerialPort({
         path: serialPortPath,
@@ -39,11 +52,9 @@ class UARTService extends EventEmitter {
         autoOpen: false,
       });
 
-      const parser = port.pipe(new ReadlineParser({ delimiter: "\n" }));
-
-      // Forward data
-      parser.on("data", (line: string) => {
-        this.emit("data", { boardId, data: line + "\n" });
+      // Forward raw serial data character-by-character/chunk-by-chunk to WebSocket
+      port.on("data", (chunk: Buffer) => {
+        this.emit("data", { boardId, data: chunk.toString("utf-8") });
       });
 
       port.on("error", (err: Error) => {
@@ -64,7 +75,7 @@ class UARTService extends EventEmitter {
         });
       });
 
-      this.ports.set(boardId, { port, parser });
+      this.ports.set(boardId, { port });
       console.log(`[UART] Opened ${serialPortPath} for board ${boardId}`);
     } catch (err) {
       console.error(`[UART] Failed to open ${serialPortPath}:`, err);
@@ -79,7 +90,7 @@ class UARTService extends EventEmitter {
     const entry = this.ports.get(boardId);
     if (!entry) return;
 
-    const port = entry.port as { write: (data: string) => void };
+    const port = entry.port;
     port.write(data);
   }
 
@@ -90,7 +101,7 @@ class UARTService extends EventEmitter {
     const entry = this.ports.get(boardId);
     if (!entry) return;
 
-    const port = entry.port as { close: () => void };
+    const port = entry.port;
     try {
       port.close();
     } catch {

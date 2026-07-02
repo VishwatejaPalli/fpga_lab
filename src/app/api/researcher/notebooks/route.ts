@@ -4,6 +4,19 @@ import { sqlite } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { getRoleConfig } from "@/lib/roles";
 
+interface NoteRow {
+  id: string;
+  user_id: string;
+  title: string;
+  content: string;
+  tags: string | null;
+  pinned: number;
+  created_at: string;
+  updated_at: string;
+  job_id?: string | null;
+  board_id?: string | null;
+}
+
 // GET — list notes
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -24,7 +37,7 @@ export async function GET(req: NextRequest) {
   }
   query += " ORDER BY pinned DESC, updated_at DESC";
 
-  const notes = sqlite.prepare(query).all(...params) as any[];
+  const notes = sqlite.prepare(query).all(...params) as NoteRow[];
   const parsed = notes.map((n) => ({
     ...n,
     tags: (() => {

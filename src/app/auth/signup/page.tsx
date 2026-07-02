@@ -18,6 +18,8 @@ export default function SignupPage() {
     setError("");
     setLoading(true);
 
+    // No client-side domain restriction (server will handle policy)
+
     try {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
@@ -69,6 +71,7 @@ export default function SignupPage() {
         <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-10">
           {/* Logo & branding */}
           <div className="text-center mb-8">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/vce-logo.png"
               alt="VCE - Vardhaman College of Engineering"
@@ -142,7 +145,7 @@ export default function SignupPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="College Email (.org)"
+                placeholder="College Email (vardhaman.org)"
                 className="input-field"
                 required
               />

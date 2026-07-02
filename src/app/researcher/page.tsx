@@ -57,10 +57,17 @@ interface Board {
   status: string;
 }
 
+interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  role: "student" | "researcher" | "admin";
+}
+
 export default function ResearcherPage() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("analytics");
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Analytics
@@ -159,7 +166,11 @@ export default function ResearcherPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    r.ok ? flash(editingNote ? "Note updated" : "Note created", true) : flash("Failed", false);
+    if (r.ok) {
+      flash(editingNote ? "Note updated" : "Note created", true);
+    } else {
+      flash("Failed", false);
+    }
     fetchNotes();
     setShowNoteForm(false);
     setEditingNote(null);

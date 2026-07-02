@@ -6,11 +6,16 @@ export interface DetectedDevice {
   description: string;
 }
 
+export interface DetectionResult {
+  devices: DetectedDevice[];
+  rawOutput: string;
+}
+
 /**
  * Detect connected FPGA devices using openFPGALoader.
  */
-export async function detectDevices(): Promise<DetectedDevice[]> {
-  return new Promise((resolve, reject) => {
+export async function detectDevices(): Promise<DetectionResult> {
+  return new Promise((resolve) => {
     const proc = spawn("openFPGALoader", ["--detect"], {
       timeout: 10000,
     });
@@ -27,15 +32,17 @@ export async function detectDevices(): Promise<DetectedDevice[]> {
     });
 
     proc.on("close", (code) => {
+      const fullOutput = stdout + stderr;
+      
       if (code !== 0) {
         // openFPGALoader may not be installed or no devices found
         console.warn("[FPGA] Detection failed:", stderr);
-        resolve([]);
+        resolve({ devices: [], rawOutput: fullOutput });
         return;
       }
 
       const devices: DetectedDevice[] = [];
-      const lines = stdout.split("\n");
+      const lines = fullOutput.split("\n");
       let index = 0;
 
       for (const line of lines) {
@@ -50,12 +57,12 @@ export async function detectDevices(): Promise<DetectedDevice[]> {
         }
       }
 
-      resolve(devices);
+      resolve({ devices, rawOutput: fullOutput });
     });
 
     proc.on("error", (err) => {
       console.error("[FPGA] Detection spawn error:", err.message);
-      resolve([]); // Don't crash, just return empty
+      resolve({ devices: [], rawOutput: `Spawn error: ${err.message}` });
     });
   });
 }

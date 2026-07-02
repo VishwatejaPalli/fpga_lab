@@ -10,6 +10,7 @@ interface Board {
   name: string;
   fpgaFamily: string;
   boardType: string;
+  boardImageUrl?: string | null;
   connectionType: string;
   status: string;
   capabilities: string[];
@@ -56,7 +57,12 @@ export default function DashboardPage() {
   }
 
   function handleSelectBoard(boardId: string) {
-    router.push(`/program?boardId=${boardId}`);
+    const board = boards.find(b => b.id === boardId);
+    if (board?.boardType.toLowerCase().includes("pynq")) {
+      router.push(`/pynq/${boardId}`);
+    } else {
+      router.push(`/program?boardId=${boardId}`);
+    }
   }
 
   async function handleEndSession() {
@@ -94,6 +100,18 @@ export default function DashboardPage() {
             <span className="badge badge-free">{freeCount} Free</span>
             <span className="badge badge-busy">{busyCount} Busy</span>
             <span className="badge badge-offline">{offlineCount} Offline</span>
+          </div>
+        </div>
+
+        <div className="card mb-6 sm:mb-8 p-4">
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <span className="text-muted uppercase tracking-wider text-xs">Status legend</span>
+            <span className="badge badge-free">Free</span>
+            <span className="text-muted">Available for reservation</span>
+            <span className="badge badge-busy">Busy</span>
+            <span className="text-muted">Active session running</span>
+            <span className="badge badge-offline">Offline</span>
+            <span className="text-muted">Hardware unreachable</span>
           </div>
         </div>
 

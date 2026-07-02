@@ -48,6 +48,7 @@ export default function LoginPage() {
         <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-10">
           {/* Logo & branding */}
           <div className="text-center mb-8">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/vce-logo.png"
               alt="VCE - Vardhaman College of Engineering"

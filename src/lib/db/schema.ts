@@ -48,8 +48,11 @@ export const boards = sqliteTable("boards", {
     .notNull()
     .default("jtag"),
   devicePath: text("device_path"), // e.g. "/dev/ttyUSB0" for JTAG cable
+  ipAddress: text("ip_address"), // Network IP address for SoC boards (e.g. PYNQ)
   serialPort: text("serial_port"), // e.g. "/dev/ttyUSB1" for UART
   cameraDevice: text("camera_device"), // e.g. "/dev/video0"
+  boardImageUrl: text("board_image_url"), // optional image URL shown in UI
+  blankBitstreamPath: text("blank_bitstream_path"), // optional path to safe bitstream
   programmingTool: text("programming_tool").default("openFPGALoader"), // tool override
   status: text("status", { enum: ["free", "busy", "offline"] })
     .notNull()

@@ -26,13 +26,9 @@ export default function Navbar() {
       .catch(() => {});
   }, []);
 
-  // Close menu on route change
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [pathname]);
-
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
+    setMenuOpen(false);
     router.push("/auth/login");
   }
 
@@ -78,6 +74,7 @@ export default function Navbar() {
         {/* Left: Logo + desktop links */}
         <div className="flex items-center gap-4 sm:gap-6">
           <Link href="/dashboard" className="flex items-center gap-2 shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/vce-logo.png" alt="VCE" className="w-7 h-7 sm:w-8 sm:h-8 object-contain" />
             <span className="font-bold text-primary text-sm sm:text-base">FPGA Lab</span>
           </Link>
@@ -155,6 +152,7 @@ export default function Navbar() {
               <Link
                 key={link.href}
                 href={link.href}
+                onClick={() => setMenuOpen(false)}
                 className={`block px-4 py-3 rounded-lg text-sm font-medium transition-colors active:bg-gray-100 touch-manipulation ${
                   pathname === link.href || pathname.startsWith(link.href + "/")
                     ? "bg-primary/10 text-primary"
@@ -169,7 +167,11 @@ export default function Navbar() {
           {/* Mobile user section */}
           {user && (
             <div className="px-4 py-3 border-t border-border">
-              <Link href="/profile" className="flex items-center gap-3 px-4 py-3 rounded-lg active:bg-gray-100 touch-manipulation">
+              <Link
+                href="/profile"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-3 px-4 py-3 rounded-lg active:bg-gray-100 touch-manipulation"
+              >
                 <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-sm">
                   {user.name.charAt(0).toUpperCase()}
                 </div>

@@ -5,6 +5,15 @@ import { getSession } from "@/lib/auth/session";
 import { getRoleConfig } from "@/lib/roles";
 import { runDemoJob } from "@/lib/fpga/demo-runner";
 
+interface BoardRow {
+  id: string;
+  status: string;
+}
+
+interface CountRow {
+  c: number;
+}
+
 // GET — list user's batch jobs
 export async function GET() {
   const session = await getSession();
@@ -44,7 +53,9 @@ export async function POST(req: NextRequest) {
 
   const jobIds: string[] = [];
   for (const boardId of boardIds) {
-    const board = sqlite.prepare("SELECT * FROM boards WHERE id = ?").get(boardId) as any;
+    const board = sqlite
+      .prepare("SELECT id, status FROM boards WHERE id = ?")
+      .get(boardId) as BoardRow | undefined;
     if (!board) continue;
 
     const jobId = uuid();
@@ -70,8 +81,9 @@ export async function POST(req: NextRequest) {
       .prepare(
         "SELECT COUNT(*) as c FROM jobs WHERE batch_id = ? AND status IN ('success','failed')"
       )
-      .get(batchId) as any;
-    if (done?.c >= boardIds.length) {
+      .get(batchId) as CountRow | undefined;
+    const completedCount = done?.c ?? 0;
+    if (completedCount >= boardIds.length) {
       sqlite.prepare("UPDATE batch_jobs SET status = 'completed', completed_at = datetime('now') WHERE id = ?").run(batchId);
     }
   }, 30000);

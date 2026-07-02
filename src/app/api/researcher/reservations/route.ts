@@ -4,6 +4,10 @@ import { sqlite } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { getRoleConfig } from "@/lib/roles";
 
+interface CountRow {
+  c: number;
+}
+
 // GET — list reservations
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -81,11 +85,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Time slot conflicts with existing reservation" }, { status: 409 });
 
   // Max 5 active reservations
-  const count = (sqlite
+  const countRow = sqlite
     .prepare(
       "SELECT COUNT(*) as c FROM board_reservations WHERE user_id = ? AND status = 'confirmed' AND ends_at > datetime('now')"
     )
-    .get(session.userId) as any)?.c || 0;
+    .get(session.userId) as CountRow | undefined;
+  const count = countRow?.c || 0;
   if (count >= 5)
     return NextResponse.json({ error: "Maximum 5 active reservations" }, { status: 400 });
 

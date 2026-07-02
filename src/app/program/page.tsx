@@ -26,6 +26,8 @@ function ProgramContent() {
   const [jobStatus, setJobStatus] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const [logConnected, setLogConnected] = useState(false);
+  const [logError, setLogError] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [demoLoaded, setDemoLoaded] = useState(false);
 
@@ -70,6 +72,13 @@ function ProgramContent() {
       `${protocol}//${window.location.host}/ws/logs/${jobId}`
     );
 
+    setLogConnected(false);
+    setLogError(null);
+
+    ws.onopen = () => {
+      setLogConnected(true);
+    };
+
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
@@ -87,6 +96,14 @@ function ProgramContent() {
       } catch {
         // ignore
       }
+    };
+
+    ws.onerror = () => {
+      setLogError("Live logs unavailable");
+    };
+
+    ws.onclose = () => {
+      setLogConnected(false);
     };
 
     return () => ws.close();
@@ -124,6 +141,8 @@ function ProgramContent() {
     setLogs([]);
     setJobStatus(null);
     setJobId(null);
+    setLogConnected(false);
+    setLogError(null);
 
     try {
       // Step 1: Upload file
@@ -339,29 +358,32 @@ function ProgramContent() {
               )}
 
               {/* Live Terminal Logs */}
-              {logs.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs font-medium text-muted uppercase tracking-wider">Terminal Output</span>
-                    {jobStatus === "programming" && (
-                      <span className="flex items-center gap-1 text-xs text-blue-600">
-                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                        LIVE
-                      </span>
-                    )}
-                  </div>
-                  <div
-                    className="bg-gray-900 rounded-lg p-4 font-mono text-sm text-green-400 max-h-80 overflow-y-auto scroll-smooth"
-                    ref={(el) => {
-                      if (el) el.scrollTop = el.scrollHeight;
-                    }}
-                  >
-                    <div className="whitespace-pre-wrap leading-relaxed">
-                      {logs.join("")}
-                    </div>
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-medium text-muted uppercase tracking-wider">Terminal Output</span>
+                  {jobStatus === "programming" && logConnected && (
+                    <span className="flex items-center gap-1 text-xs text-blue-600">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                      LIVE
+                    </span>
+                  )}
+                  {logError && (
+                    <span className="text-xs text-warning">{logError}</span>
+                  )}
+                </div>
+                <div
+                  className="bg-gray-900 rounded-lg p-4 font-mono text-sm text-green-400 max-h-80 overflow-y-auto scroll-smooth"
+                  ref={(el) => {
+                    if (el) el.scrollTop = el.scrollHeight;
+                  }}
+                >
+                  <div className="whitespace-pre-wrap leading-relaxed">
+                    {logs.length > 0
+                      ? logs.join("")
+                      : "Waiting for programmer output..."}
                   </div>
                 </div>
-              )}
+              </div>
             </div>
           )}
         </div>

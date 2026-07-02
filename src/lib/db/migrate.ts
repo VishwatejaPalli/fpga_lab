@@ -37,8 +37,11 @@ export function runMigrations() {
       board_type TEXT NOT NULL,
       connection_type TEXT NOT NULL DEFAULT 'jtag',
       device_path TEXT,
+      ip_address TEXT,
       serial_port TEXT,
       camera_device TEXT,
+      board_image_url TEXT,
+      blank_bitstream_path TEXT,
       programming_tool TEXT DEFAULT 'openFPGALoader',
       status TEXT NOT NULL DEFAULT 'free',
       current_session_id TEXT,
@@ -127,6 +130,9 @@ export function runMigrations() {
   safeAlter("ALTER TABLE jobs ADD COLUMN priority INTEGER NOT NULL DEFAULT 0");
   safeAlter("ALTER TABLE jobs ADD COLUMN batch_id TEXT");
   safeAlter("ALTER TABLE jobs ADD COLUMN file_size INTEGER DEFAULT 0");
+  safeAlter("ALTER TABLE boards ADD COLUMN board_image_url TEXT");
+  safeAlter("ALTER TABLE boards ADD COLUMN blank_bitstream_path TEXT");
+  safeAlter("ALTER TABLE boards ADD COLUMN ip_address TEXT");
 
   console.log("[DB] Migrations complete");
 }

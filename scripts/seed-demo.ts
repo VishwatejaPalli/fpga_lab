@@ -28,6 +28,7 @@ db.exec(`
     board_type TEXT NOT NULL,
     connection_type TEXT NOT NULL DEFAULT 'jtag',
     device_path TEXT,
+    ip_address TEXT,
     serial_port TEXT,
     camera_device TEXT,
     programming_tool TEXT DEFAULT 'openFPGALoader',
@@ -74,6 +75,7 @@ const boards = [
     board_type: "basys3",
     connection_type: "jtag",
     device_path: "/dev/ttyUSB0",
+    ip_address: null,
     serial_port: "/dev/ttyUSB1",
     camera_device: "/dev/video0",
     programming_tool: "openFPGALoader",
@@ -88,6 +90,7 @@ const boards = [
     board_type: "nexysA7",
     connection_type: "jtag",
     device_path: "/dev/ttyUSB2",
+    ip_address: null,
     serial_port: "/dev/ttyUSB3",
     camera_device: "/dev/video1",
     programming_tool: "openFPGALoader",
@@ -102,6 +105,7 @@ const boards = [
     board_type: "pynq-z2",
     connection_type: "jtag",
     device_path: "/dev/ttyUSB4",
+    ip_address: "192.168.2.99",
     serial_port: "/dev/ttyUSB5",
     camera_device: null,
     programming_tool: "openFPGALoader",
@@ -116,6 +120,7 @@ const boards = [
     board_type: "de10lite",
     connection_type: "jtag",
     device_path: "/dev/ttyUSB6",
+    ip_address: null,
     serial_port: "/dev/ttyUSB7",
     camera_device: "/dev/video2",
     programming_tool: "quartus_pgm",
@@ -130,6 +135,7 @@ const boards = [
     board_type: "icebreaker",
     connection_type: "usb",
     device_path: "/dev/ttyACM0",
+    ip_address: null,
     serial_port: "/dev/ttyACM1",
     camera_device: "/dev/video3",
     programming_tool: "openFPGALoader",
@@ -141,22 +147,22 @@ const boards = [
 
 const insertBoard = db.prepare(`
   INSERT INTO boards (id, name, fpga_family, board_type, connection_type,
-    device_path, serial_port, camera_device, programming_tool, status,
+    device_path, ip_address, serial_port, camera_device, programming_tool, status,
     capabilities, session_timeout_minutes)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 for (const b of boards) {
   insertBoard.run(
     b.id, b.name, b.fpga_family, b.board_type, b.connection_type,
-    b.device_path, b.serial_port, b.camera_device, b.programming_tool,
+    b.device_path, b.ip_address, b.serial_port, b.camera_device, b.programming_tool,
     b.status, b.capabilities, b.session_timeout_minutes
   );
 }
 
 // ── Get user IDs ────────────────────────────────────────────────────────────
 const admin = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get() as { id: string } | undefined;
-const user = db.prepare("SELECT id FROM users WHERE role = 'user' LIMIT 1").get() as { id: string } | undefined;
+const user = db.prepare("SELECT id FROM users WHERE role = 'student' LIMIT 1").get() as { id: string } | undefined;
 
 if (user || admin) {
   const userId = (user || admin)!.id;

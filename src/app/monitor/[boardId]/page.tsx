@@ -162,6 +162,14 @@ export default function MonitorPage() {
             <button onClick={handleEndSession} className="btn-danger text-sm sm:text-base">
               End Session
             </button>
+            {board.boardType.toLowerCase().includes("pynq") && (
+              <button 
+                onClick={() => router.push(`/pynq/${boardId}`)} 
+                className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg shadow-lg hover:from-blue-700 hover:to-indigo-700 font-bold transition-all animate-pulse hover:animate-none"
+              >
+                🚀 Advanced SoC Lab
+              </button>
+            )}
           </div>
         </div>
 

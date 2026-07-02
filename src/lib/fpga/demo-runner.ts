@@ -9,8 +9,7 @@ import { EventEmitter } from "events";
 import { eq } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import db from "@/lib/db";
-import { jobs, boards, hwSessions, users } from "@/lib/db/schema";
-import { getRoleConfig } from "@/lib/roles";
+import { jobs, boards, hwSessions } from "@/lib/db/schema";
 
 // Initialize global job event emitter if not already set
 if (!globalThis.__jobQueue) {
@@ -195,6 +194,5 @@ function sleep(ms: number): Promise<void> {
 
 // Augment global types
 declare global {
-  // eslint-disable-next-line no-var
   var __jobQueue: EventEmitter | undefined;
 }

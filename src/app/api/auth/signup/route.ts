@@ -8,7 +8,6 @@ import { hashPassword } from "@/lib/auth/password";
 import {
   generateToken,
   sendVerificationEmail,
-  isAllowedDomain,
 } from "@/lib/auth/email";
 import { z } from "zod";
 
@@ -32,14 +31,6 @@ export async function POST(req: NextRequest) {
     }
 
     const { email, password, name, role } = parsed.data;
-
-    // Check email domain
-    if (!isAllowedDomain(email)) {
-      return NextResponse.json(
-        { error: "Only college email addresses are allowed" },
-        { status: 400 }
-      );
-    }
 
     // Check if user exists
     const existing = db

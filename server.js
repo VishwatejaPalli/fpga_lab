@@ -1,25 +1,21 @@
-// Custom server with WebSocket support for UART and job logs
-// Run with: node server.js
+/**
+ * Custom server for FPGA Remote Lab.
+ *
+ * Wraps the Next.js request handler with a raw HTTP server so we can
+ * handle WebSocket upgrades for:
+ *   /ws/uart/:boardId   — bidirectional serial console
+ *   /ws/logs/:jobId     — real-time programming log stream
+ *   /ws/camera/:boardId — MJPEG frame stream
+ */
 
 const { createServer } = require("http");
 const { parse } = require("url");
 const next = require("next");
-const { WebSocketServer } = require("ws");
-
-const { EventEmitter } = require("events");
+const { WebSocketServer, WebSocket } = require("ws");
 
 const dev = process.env.NODE_ENV !== "production";
-const hostname = "0.0.0.0";
-const port = parseInt(process.env.APP_PORT || "3000", 10);
-
-// Initialize global event emitters for WebSocket communication
-if (!globalThis.__jobQueue) {
-  globalThis.__jobQueue = new EventEmitter();
-  globalThis.__jobQueue.setMaxListeners(50);
-}
-if (!globalThis.__uartService) {
-  // Will be replaced by real UART service when hardware is connected
-}
+const hostname = process.env.HOST || "0.0.0.0";
+const port = parseInt(process.env.PORT || "3000", 10);
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
@@ -30,167 +26,161 @@ app.prepare().then(() => {
     handle(req, res, parsedUrl);
   });
 
-  // ─── WebSocket server for UART and job logs ──────────────────────────────
+  // ─── WebSocket servers ──────────────────────────────────────────────────
 
-  const wss = new WebSocketServer({ noServer: true });
+  const uartWss = new WebSocketServer({ noServer: true });
+  const logsWss = new WebSocketServer({ noServer: true });
+  const cameraWss = new WebSocketServer({ noServer: true });
 
+  // Route WebSocket upgrades by path
   server.on("upgrade", (req, socket, head) => {
     const { pathname } = parse(req.url, true);
 
-    // Only handle our WebSocket paths
-    if (
-      pathname &&
-      (pathname.startsWith("/ws/uart/") ||
-        pathname.startsWith("/ws/logs/"))
-    ) {
-      wss.handleUpgrade(req, socket, head, (ws) => {
-        wss.emit("connection", ws, req);
+    if (pathname && pathname.startsWith("/ws/uart/")) {
+      uartWss.handleUpgrade(req, socket, head, (ws) => {
+        const boardId = pathname.split("/ws/uart/")[1];
+        uartWss.emit("connection", ws, req, boardId);
+      });
+    } else if (pathname && pathname.startsWith("/ws/logs/")) {
+      logsWss.handleUpgrade(req, socket, head, (ws) => {
+        const jobId = pathname.split("/ws/logs/")[1];
+        logsWss.emit("connection", ws, req, jobId);
+      });
+    } else if (pathname && pathname.startsWith("/ws/camera/")) {
+      cameraWss.handleUpgrade(req, socket, head, (ws) => {
+        const boardId = pathname.split("/ws/camera/")[1];
+        cameraWss.emit("connection", ws, req, boardId);
       });
     } else {
       socket.destroy();
     }
   });
 
-  wss.on("connection", (ws, req) => {
-    const { pathname } = parse(req.url, true);
+  // ─── UART WebSocket handler ─────────────────────────────────────────────
 
-    if (pathname.startsWith("/ws/uart/")) {
-      const boardId = pathname.replace("/ws/uart/", "");
-      handleUARTConnection(ws, boardId);
-    } else if (pathname.startsWith("/ws/logs/")) {
-      const jobId = pathname.replace("/ws/logs/", "");
-      handleLogConnection(ws, jobId);
+  uartWss.on("connection", (ws, _req, boardId) => {
+    console.log(`[WS] UART client connected for board ${boardId}`);
+
+    // Try to get the UART service from the global scope
+    const uartService = globalThis.__uartService;
+
+    if (uartService) {
+      // Open the serial port if not already open
+      uartService.open(boardId).catch((err) => {
+        console.warn(`[WS] Could not open UART for ${boardId}:`, err.message);
+      });
+
+      // Forward serial data to the WebSocket client
+      const onData = ({ boardId: bId, data }) => {
+        if (bId === boardId && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "uart-data", data }));
+        }
+      };
+      uartService.on("data", onData);
+
+      // Forward client input to the serial port
+      ws.on("message", (raw) => {
+        try {
+          const msg = JSON.parse(raw.toString());
+          if (msg.type === "uart-input" && msg.data) {
+            uartService.write(boardId, msg.data);
+          }
+        } catch {
+          // Not JSON — send raw as serial data
+          uartService.write(boardId, raw.toString());
+        }
+      });
+
+      ws.on("close", () => {
+        uartService.removeListener("data", onData);
+        console.log(`[WS] UART client disconnected for board ${boardId}`);
+      });
+    } else {
+      // No UART service available — close after a brief delay
+      // (client-side terminal will fall back to demo mode on close)
+      setTimeout(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close();
+        }
+      }, 500);
     }
   });
 
-  // ─── UART WebSocket handler ──────────────────────────────────────────────
+  // ─── Job Logs WebSocket handler ─────────────────────────────────────────
 
-  function handleUARTConnection(ws, boardId) {
-    console.log(`[WS] UART client connected for board ${boardId}`);
+  logsWss.on("connection", (ws, _req, jobId) => {
+    console.log(`[WS] Logs client connected for job ${jobId}`);
 
-    // Dynamic import for UART service (ESM modules)
-    let uartCleanup = null;
+    const jobQueue = globalThis.__jobQueue;
 
-    // Forward UART data to WebSocket
-    const onData = ({ boardId: id, data }) => {
-      if (id === boardId && ws.readyState === ws.OPEN) {
-        ws.send(JSON.stringify({ type: "uart-data", data }));
-      }
-    };
-
-    // We'll set up the listener once the UART service is available
-    // For now, the UART service emits events that we can listen to
-    // This will be connected via the global event system
-
-    // Listen for input from the browser to write to serial
-    ws.on("message", (msg) => {
-      try {
-        const parsed = JSON.parse(msg.toString());
-        if (parsed.type === "uart-input") {
-          // Forward to UART service
-          globalThis.__uartService?.write(boardId, parsed.data);
+    if (jobQueue) {
+      const onLog = (data) => {
+        if (data.jobId === jobId && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "job-log", data: data.text }));
         }
-      } catch {
-        // Ignore malformed messages
-      }
-    });
+      };
 
-    ws.on("close", () => {
-      console.log(`[WS] UART client disconnected for board ${boardId}`);
-      if (uartCleanup) uartCleanup();
-      if (globalThis.__uartService) {
-        globalThis.__uartService.removeListener("data", onData);
-      }
-    });
+      const onComplete = (data) => {
+        if (data.jobId === jobId && ws.readyState === WebSocket.OPEN) {
+          ws.send(
+            JSON.stringify({
+              type: "job-complete",
+              success: data.success,
+              sessionId: data.sessionId || null,
+            })
+          );
+        }
+      };
 
-    // Register listener on global UART service
-    if (globalThis.__uartService) {
-      globalThis.__uartService.on("data", onData);
+      jobQueue.on("job-log", onLog);
+      jobQueue.on("job-complete", onComplete);
+
+      ws.on("close", () => {
+        jobQueue.removeListener("job-log", onLog);
+        jobQueue.removeListener("job-complete", onComplete);
+        console.log(`[WS] Logs client disconnected for job ${jobId}`);
+      });
+    } else {
+      ws.on("close", () => {
+        console.log(`[WS] Logs client disconnected for job ${jobId}`);
+      });
     }
+  });
 
-    // Retry: check periodically if UART service becomes available
-    const checkInterval = setInterval(() => {
-      if (globalThis.__uartService && !uartCleanup) {
-        globalThis.__uartService.on("data", onData);
-        uartCleanup = () =>
-          globalThis.__uartService?.removeListener("data", onData);
-        clearInterval(checkInterval);
-      }
-    }, 1000);
+  // ─── Camera WebSocket handler ───────────────────────────────────────────
 
-    ws.on("close", () => clearInterval(checkInterval));
-  }
+  cameraWss.on("connection", (ws, _req, boardId) => {
+    console.log(`[WS] Camera client connected for board ${boardId}`);
 
-  // ─── Job log WebSocket handler ───────────────────────────────────────────
+    const cameraService = globalThis.__cameraService;
+    let unsubscribe;
 
-  function handleLogConnection(ws, jobId) {
-    console.log(`[WS] Log client connected for job ${jobId}`);
-
-    const onLog = ({ jobId: id, text }) => {
-      if (id === jobId && ws.readyState === ws.OPEN) {
-        ws.send(JSON.stringify({ type: "job-log", data: text }));
-      }
-    };
-
-    const onComplete = ({ jobId: id, success, sessionId }) => {
-      if (id === jobId && ws.readyState === ws.OPEN) {
-        ws.send(
-          JSON.stringify({
-            type: "job-complete",
-            success,
-            sessionId,
-          })
-        );
-      }
-    };
-
-    if (globalThis.__jobQueue) {
-      globalThis.__jobQueue.on("job-log", onLog);
-      globalThis.__jobQueue.on("job-complete", onComplete);
+    if (cameraService) {
+      // Forward camera stream binary JPEG frames to the client
+      unsubscribe = cameraService.subscribe(boardId, (frame) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(frame, { binary: true });
+        }
+      });
+    } else {
+      setTimeout(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close();
+        }
+      }, 500);
     }
 
     ws.on("close", () => {
-      console.log(`[WS] Log client disconnected for job ${jobId}`);
-      if (globalThis.__jobQueue) {
-        globalThis.__jobQueue.removeListener("job-log", onLog);
-        globalThis.__jobQueue.removeListener("job-complete", onComplete);
+      if (unsubscribe) {
+        unsubscribe();
       }
+      console.log(`[WS] Camera client disconnected for board ${boardId}`);
     });
-  }
+  });
 
-  // ─── Initialize services ─────────────────────────────────────────────────
-
-  // Run migrations and start background services
-  // These use dynamic require since they're compiled TypeScript
-  setTimeout(async () => {
-    try {
-      // Migrations run synchronously via better-sqlite3
-      console.log("[Server] Running database migrations...");
-
-      // We need to use ts-node or tsx to import TypeScript modules
-      // In production, these would be compiled. For dev, use tsx.
-      // The services are initialized via the imports in the Next.js app
-      // We set up globals that the WebSocket handlers can reference.
-
-      console.log("[Server] Services will be initialized on first request");
-    } catch (err) {
-      console.error("[Server] Initialization error:", err);
-    }
-  }, 100);
-
-  // ─── Start server ────────────────────────────────────────────────────────
+  // ─── Start server ──────────────────────────────────────────────────────
 
   server.listen(port, hostname, () => {
-    console.log(`
-╔══════════════════════════════════════════════════════╗
-║          FPGA Remote Lab Server Started              ║
-║                                                      ║
-║   Local:   http://localhost:${port}                    ║
-║   Network: http://${hostname}:${port}                    ║
-║                                                      ║
-║   WebSocket: ws://localhost:${port}/ws/uart/:boardId   ║
-║   WebSocket: ws://localhost:${port}/ws/logs/:jobId     ║
-╚══════════════════════════════════════════════════════╝
-    `);
+    console.log(`\n  ⚡ FPGA Remote Lab running at http://${hostname}:${port}\n`);
   });
 });

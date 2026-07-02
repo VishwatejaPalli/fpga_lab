@@ -15,6 +15,7 @@ export async function GET() {
       name: boards.name,
       fpgaFamily: boards.fpgaFamily,
       boardType: boards.boardType,
+      boardImageUrl: boards.boardImageUrl,
       connectionType: boards.connectionType,
       status: boards.status,
       capabilities: boards.capabilities,

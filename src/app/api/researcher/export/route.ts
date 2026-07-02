@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   const format = searchParams.get("format") || "json";
   const type = searchParams.get("type") || "jobs";
 
-  let data: any[];
+  let data: unknown[];
   let filename: string;
 
   switch (type) {
@@ -57,15 +57,20 @@ export async function GET(req: NextRequest) {
   }
 
   if (format === "csv") {
-    if (data.length === 0) {
+    const objectRows = data.filter(
+      (row): row is Record<string, unknown> =>
+        typeof row === "object" && row !== null && !Array.isArray(row)
+    );
+
+    if (objectRows.length === 0) {
       return new NextResponse("No data to export", {
         headers: { "Content-Type": "text/plain" },
       });
     }
-    const headers = Object.keys(data[0]);
+    const headers = Object.keys(objectRows[0]);
     const csvRows = [
       headers.join(","),
-      ...data.map((row) =>
+      ...objectRows.map((row) =>
         headers
           .map((h) => {
             const val = String(row[h] ?? "");

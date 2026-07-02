@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Note: We can't use jsonwebtoken in Edge middleware (native crypto not available).
+// Note: We can't use jsonwebtoken in Edge proxy (native crypto not available).
 // Instead we do a lightweight JWT decode (base64) and verify structure.
 // Full verification happens in the API route handlers.
-
 function decodeJwtPayload(
   token: string
 ): { userId: string; role: string; exp: number } | null {
@@ -19,10 +18,10 @@ function decodeJwtPayload(
   }
 }
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Public paths — no auth required
+  // Public paths — no auth required.
   const publicPaths = [
     "/",
     "/auth/login",
@@ -38,7 +37,7 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Static files and Next.js internals
+  // Static files and Next.js internals.
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
@@ -47,19 +46,19 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check for auth token
+  // Check for auth token.
   const token = req.cookies.get("token")?.value;
 
   if (!token) {
-    // API routes return 401
+    // API routes return 401.
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    // Pages redirect to login
+    // Pages redirect to login.
     return NextResponse.redirect(new URL("/auth/login", req.url));
   }
 
-  // Decode JWT (lightweight check)
+  // Decode JWT (lightweight check).
   const payload = decodeJwtPayload(token);
 
   if (!payload || !payload.userId) {
@@ -69,7 +68,7 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL("/auth/login", req.url));
   }
 
-  // Check expiry
+  // Check expiry.
   if (payload.exp && payload.exp * 1000 < Date.now()) {
     const response = pathname.startsWith("/api/")
       ? NextResponse.json({ error: "Token expired" }, { status: 401 })
@@ -79,7 +78,7 @@ export function middleware(req: NextRequest) {
     return response;
   }
 
-  // Admin routes check
+  // Admin routes check.
   if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
     if (payload.role !== "admin") {
       if (pathname.startsWith("/api/")) {
@@ -89,8 +88,11 @@ export function middleware(req: NextRequest) {
     }
   }
 
-  // Researcher routes check (researcher + admin allowed)
-  if (pathname.startsWith("/researcher") || pathname.startsWith("/api/researcher")) {
+  // Researcher routes check (researcher + admin allowed).
+  if (
+    pathname.startsWith("/researcher") ||
+    pathname.startsWith("/api/researcher")
+  ) {
     if (payload.role !== "researcher" && payload.role !== "admin") {
       if (pathname.startsWith("/api/")) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -105,7 +107,7 @@ export function middleware(req: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all paths except static files
+     * Match all paths except static files.
      */
     "/((?!_next/static|_next/image|favicon.ico).*)",
   ],

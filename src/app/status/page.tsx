@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/navbar";
 
@@ -39,13 +39,7 @@ export default function StatusPage() {
   const [data, setData] = useState<StatusData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  function fetchStatus() {
+  const fetchStatus = useCallback(() => {
     fetch("/api/status")
       .then((res) => {
         if (!res.ok) {
@@ -59,7 +53,13 @@ export default function StatusPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }
+  }, [router]);
+
+  useEffect(() => {
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 10000);
+    return () => clearInterval(interval);
+  }, [fetchStatus]);
 
   function statusDot(status: string) {
     const color: Record<string, string> = {

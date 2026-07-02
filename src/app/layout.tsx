@@ -1,6 +1,12 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { initializeServer } from "@/lib/init";
+
+// Initialize backend services on server start
+if (typeof window === "undefined") {
+  initializeServer();
+}
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,18 +21,19 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "FPGA Remote Lab",
   description: "Cloud-based FPGA programming and monitoring platform",
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-  },
-  themeColor: "#2c3e6b",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "FPGA Lab",
   },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: "#2c3e6b",
 };
 
 export default function RootLayout({

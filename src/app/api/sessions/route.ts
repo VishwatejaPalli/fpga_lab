@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
 import db from "@/lib/db";
-import { hwSessions, boards } from "@/lib/db/schema";
+import { hwSessions } from "@/lib/db/schema";
 import { getSession } from "@/lib/auth/session";
+import { sessionEnforcer } from "@/lib/sessions/enforcer";
 
 /**
  * GET - Get user's active session
@@ -55,17 +56,8 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // End session
-  db.update(hwSessions)
-    .set({ status: "ended" })
-    .where(eq(hwSessions.id, sessionId))
-    .run();
-
-  // Release board
-  db.update(boards)
-    .set({ status: "free", currentSessionId: null })
-    .where(eq(boards.id, hwSession.boardId))
-    .run();
+  // End session and cleanup hardware
+  await sessionEnforcer.endSession(hwSession, "ended");
 
   return NextResponse.json({ message: "Session ended" });
 }

@@ -13,7 +13,7 @@ const jobSchema = z.object({
   bitstreamName: z.string().min(1),
 });
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

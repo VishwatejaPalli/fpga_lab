@@ -8,15 +8,16 @@ import { Suspense } from "react";
 function VerifyContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
+  const hasToken = Boolean(token);
   const [status, setStatus] = useState<"loading" | "success" | "error">(
-    "loading"
+    hasToken ? "loading" : "error"
   );
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(
+    hasToken ? "" : "No verification token provided"
+  );
 
   useEffect(() => {
     if (!token) {
-      setStatus("error");
-      setMessage("No verification token provided");
       return;
     }
 

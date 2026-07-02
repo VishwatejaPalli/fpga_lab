@@ -4,10 +4,73 @@ interface BoardCardProps {
     name: string;
     fpgaFamily: string;
     boardType: string;
+    boardImageUrl?: string | null;
     status: string;
     capabilities: string[];
   };
   onSelect?: (boardId: string) => void;
+}
+
+const defaultBoardImageUrl = "/campus-1.jpg";
+
+const boardImageByType: Record<
+  string,
+  { imageUrl: string; manufacturer: string; model: string }
+> = {
+  basys3: {
+    imageUrl:
+      "https://cdn11.bigcommerce.com/s-7gavg/images/stencil/1280x1280/products/106/6255/Basys3-Rev.C-obl-1000__14394.1749749725.png?c=2",
+    manufacturer: "Digilent",
+    model: "Basys 3",
+  },
+  nexysa7: {
+    imageUrl:
+      "https://cdn11.bigcommerce.com/s-7gavg/images/stencil/1280x1280/products/629/5235/NexysA7-obl-600__85101.1670975737.jpg?c=2",
+    manufacturer: "Digilent",
+    model: "Nexys A7",
+  },
+  "pynq-z2": {
+    imageUrl: "https://www.tulembedded.com/FPGA/images/01_PYNQ-Z2.jpg",
+    manufacturer: "TUL",
+    model: "PYNQ-Z2",
+  },
+  pynqz2: {
+    imageUrl: "https://www.tulembedded.com/FPGA/images/01_PYNQ-Z2.jpg",
+    manufacturer: "TUL",
+    model: "PYNQ-Z2",
+  },
+  de10lite: {
+    imageUrl:
+      "https://www.terasic.com.tw/attachment/archive/1021/image/DE10-Lite_45.jpg",
+    manufacturer: "Terasic",
+    model: "DE10-Lite",
+  },
+  "de10-lite": {
+    imageUrl:
+      "https://www.terasic.com.tw/attachment/archive/1021/image/DE10-Lite_45.jpg",
+    manufacturer: "Terasic",
+    model: "DE10-Lite",
+  },
+  icebreaker: {
+    imageUrl:
+      "https://docs.icebreaker-fpga.org/assets/img/icebreaker/icebreaker-iso_png_project-body_1024x1024.webp",
+    manufacturer: "1BitSquared",
+    model: "iCEBreaker",
+  },
+};
+
+function getBoardImageMeta(boardType: string) {
+  const exact = boardImageByType[boardType.toLowerCase()];
+  if (exact) return exact;
+
+  const normalized = boardType.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return (
+    boardImageByType[normalized] || {
+      imageUrl: defaultBoardImageUrl,
+      manufacturer: "FPGA Vendor",
+      model: "Board",
+    }
+  );
 }
 
 const capabilityIcons: Record<string, string> = {
@@ -20,17 +83,28 @@ const capabilityIcons: Record<string, string> = {
 };
 
 export default function BoardCard({ board, onSelect }: BoardCardProps) {
+  const boardImage = getBoardImageMeta(board.boardType);
+  const configuredImage = board.boardImageUrl?.trim();
+  const boardImageUrl = configuredImage || boardImage.imageUrl;
+  const boardImageAlt = `${boardImage.model} by ${boardImage.manufacturer}`;
+
   return (
     <div
       className="card cursor-pointer transition-all hover:shadow-lg active:scale-[0.98] touch-manipulation"
       onClick={() => onSelect?.(board.id)}
     >
-      {/* FPGA board image */}
-      <div className="mb-4 -mx-6 -mt-6 rounded-t-xl overflow-hidden border-b border-border">
+      <div className="mb-4 overflow-hidden rounded-lg border border-border bg-background">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/fpga-board.svg"
-          alt={`${board.name} FPGA board`}
-          className="w-full h-32 object-cover"
+          src={boardImageUrl}
+          alt={boardImageAlt}
+          className="h-32 w-full object-cover"
+          loading="lazy"
+          onError={(e) => {
+            const img = e.currentTarget;
+            if (img.src.endsWith(defaultBoardImageUrl)) return;
+            img.src = defaultBoardImageUrl;
+          }}
         />
       </div>
 

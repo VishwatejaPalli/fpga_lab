@@ -2,8 +2,10 @@ import { eq } from "drizzle-orm";
 import db from "@/lib/db";
 import { hwSessions, boards } from "@/lib/db/schema";
 import { resetBoard } from "@/lib/fpga/reset";
+import { FPGAProgrammer } from "@/lib/fpga/programmer";
 import { uartService } from "@/lib/hardware/uart";
 import { cameraService } from "@/lib/hardware/camera";
+import fs from "fs";
 
 /**
  * Session Enforcer — periodically checks for expired hardware sessions
@@ -57,7 +59,10 @@ class SessionEnforcer {
   /**
    * Cleanup a session: stop UART, stop camera, reset FPGA, release board.
    */
-  async endSession(session: typeof hwSessions.$inferSelect) {
+  async endSession(
+    session: typeof hwSessions.$inferSelect,
+    status: "expired" | "ended" = "expired"
+  ) {
     try {
       // Stop UART
       uartService.close(session.boardId);
@@ -73,12 +78,34 @@ class SessionEnforcer {
         .get();
 
       if (board) {
-        // Reset FPGA
-        await resetBoard({
-          boardType: board.boardType,
-          programmingTool: board.programmingTool || "openFPGALoader",
-          devicePath: board.devicePath,
-        });
+        const blankPath = board.blankBitstreamPath || process.env.BLANK_BITSTREAM_PATH;
+        const canBlank = blankPath && fs.existsSync(blankPath);
+
+        if (canBlank) {
+          const programmer = new FPGAProgrammer();
+          const result = await programmer.program({
+            boardType: board.boardType,
+            bitstreamPath: blankPath,
+            programmingTool: board.programmingTool || "openFPGALoader",
+            devicePath: board.devicePath,
+            timeout: 120000,
+          });
+
+          if (!result.success) {
+            await resetBoard({
+              boardType: board.boardType,
+              programmingTool: board.programmingTool || "openFPGALoader",
+              devicePath: board.devicePath,
+            });
+          }
+        } else {
+          // Fallback to reset if no blank bitstream is configured
+          await resetBoard({
+            boardType: board.boardType,
+            programmingTool: board.programmingTool || "openFPGALoader",
+            devicePath: board.devicePath,
+          });
+        }
 
         // Release board
         db.update(boards)
@@ -87,9 +114,9 @@ class SessionEnforcer {
           .run();
       }
 
-      // Mark session as expired
+      // Mark session complete
       db.update(hwSessions)
-        .set({ status: "expired" })
+        .set({ status })
         .where(eq(hwSessions.id, session.id))
         .run();
 

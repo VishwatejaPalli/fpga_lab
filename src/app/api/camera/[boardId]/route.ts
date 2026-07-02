@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import db from "@/lib/db";
 import { boards } from "@/lib/db/schema";
 import { getSession } from "@/lib/auth/session";
-import { spawn } from "child_process";
+import { cameraService } from "@/lib/hardware/camera";
 
 export async function GET(
   _req: NextRequest,
@@ -26,54 +26,38 @@ export async function GET(
     return new NextResponse("Camera not available", { status: 404 });
   }
 
-  // Start MJPEG stream using ffmpeg
-  const ffmpeg = spawn("ffmpeg", [
-    "-f", "v4l2",
-    "-i", board.cameraDevice,
-    "-f", "mjpeg",
-    "-q:v", "5",
-    "-r", "15",
-    "-s", "640x480",
-    "pipe:1",
-  ]);
+  // Start the shared MJPEG stream for the board (if not already active)
+  cameraService.start(boardId, board.cameraDevice);
+
+  let unsubscribe: (() => void) | null = null;
 
   const stream = new ReadableStream({
     start(controller) {
       const boundary = "frame";
 
-      ffmpeg.stdout.on("data", (chunk: Buffer) => {
+      // Subscribe to the shared camera service JPEG broadcast
+      unsubscribe = cameraService.subscribe(boardId, (frame: Buffer) => {
         try {
-          const header = `--${boundary}\r\nContent-Type: image/jpeg\r\nContent-Length: ${chunk.length}\r\n\r\n`;
+          const header = `--${boundary}\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.length}\r\n\r\n`;
           controller.enqueue(new TextEncoder().encode(header));
-          controller.enqueue(chunk);
+          controller.enqueue(frame);
           controller.enqueue(new TextEncoder().encode("\r\n"));
         } catch {
-          // Stream closed
-        }
-      });
-
-      ffmpeg.stderr.on("data", (_data: Buffer) => {
-        // ffmpeg logs to stderr, ignore
-      });
-
-      ffmpeg.on("close", () => {
-        try {
-          controller.close();
-        } catch {
-          // Already closed
-        }
-      });
-
-      ffmpeg.on("error", () => {
-        try {
-          controller.close();
-        } catch {
-          // Already closed
+          if (unsubscribe) {
+            unsubscribe();
+            unsubscribe = null;
+          }
+          try {
+            controller.close();
+          } catch {}
         }
       });
     },
     cancel() {
-      ffmpeg.kill("SIGTERM");
+      if (unsubscribe) {
+        unsubscribe();
+        unsubscribe = null;
+      }
     },
   });
 

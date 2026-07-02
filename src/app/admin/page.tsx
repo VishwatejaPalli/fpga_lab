@@ -10,8 +10,11 @@ interface Board {
   boardType: string;
   connectionType: string;
   devicePath: string | null;
+  ipAddress: string | null;
   serialPort: string | null;
   cameraDevice: string | null;
+  boardImageUrl: string | null;
+  blankBitstreamPath: string | null;
   programmingTool: string | null;
   status: string;
   capabilities: string[];
@@ -34,24 +37,68 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [updatingRole, setUpdatingRole] = useState<string | null>(null);
+  const [editingBoardId, setEditingBoardId] = useState<string | null>(null);
+  const [showCreateUser, setShowCreateUser] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [createEmail, setCreateEmail] = useState("");
+  const [createPassword, setCreatePassword] = useState("");
+  const [createRole, setCreateRole] = useState<"student" | "researcher" | "admin">("student");
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createError, setCreateError] = useState("");
 
   // Board form state
-  const [boardForm, setBoardForm] = useState({
+  const emptyBoardForm = {
     name: "",
     fpgaFamily: "",
     boardType: "",
     connectionType: "jtag",
     devicePath: "",
+    ipAddress: "",
     serialPort: "",
     cameraDevice: "",
+    boardImageUrl: "",
+    blankBitstreamPath: "",
     programmingTool: "openFPGALoader",
     capabilities: [] as string[],
     sessionTimeoutMinutes: 30,
-  });
+  };
+
+  const [boardForm, setBoardForm] = useState(emptyBoardForm);
+  const [detecting, setDetecting] = useState(false);
+  const [detectedDevices, setDetectedDevices] = useState<{ hardware: any[]; serialPorts: string[]; cameras: string[]; rawOutput?: string } | null>(null);
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  async function handleDetect() {
+    setDetecting(true);
+    setDetectedDevices(null);
+    try {
+      const res = await fetch("/api/admin/boards/detect");
+      const data = await res.json();
+      if (res.ok) {
+        setDetectedDevices(data);
+      } else {
+        alert(data.error || "Detection failed");
+      }
+    } catch (err) {
+      alert("Network error during detection");
+    } finally {
+      setDetecting(false);
+    }
+  }
+
+  function applyTemplate(item: any) {
+    if (!item.template) return;
+    setBoardForm((prev) => ({
+      ...prev,
+      name: `${item.template.name} (${item.idcode})`,
+      fpgaFamily: item.template.fpgaFamily,
+      boardType: item.template.boardType,
+      capabilities: item.template.capabilities,
+    }));
+  }
 
   async function fetchData() {
     setLoading(true);
@@ -73,45 +120,65 @@ export default function AdminPage() {
     }
   }
 
-  async function handleAddBoard(e: React.FormEvent) {
+  function resetBoardForm() {
+    setBoardForm(emptyBoardForm);
+    setEditingBoardId(null);
+  }
+
+  function handleEditBoard(board: Board) {
+    setEditingBoardId(board.id);
+    setBoardForm({
+      name: board.name,
+      fpgaFamily: board.fpgaFamily,
+      boardType: board.boardType,
+      connectionType: board.connectionType,
+      devicePath: board.devicePath || "",
+      ipAddress: board.ipAddress || "",
+      serialPort: board.serialPort || "",
+      cameraDevice: board.cameraDevice || "",
+      boardImageUrl: board.boardImageUrl || "",
+      blankBitstreamPath: board.blankBitstreamPath || "",
+      programmingTool: board.programmingTool || "openFPGALoader",
+      capabilities: board.capabilities,
+      sessionTimeoutMinutes: board.sessionTimeoutMinutes,
+    });
+    setTab("add-board");
+  }
+
+  async function handleSaveBoard(e: React.FormEvent) {
     e.preventDefault();
     setMessage("");
 
     try {
       const res = await fetch("/api/admin/boards", {
-        method: "POST",
+        method: editingBoardId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          id: editingBoardId,
           ...boardForm,
           devicePath: boardForm.devicePath || undefined,
+          ipAddress: boardForm.ipAddress || undefined,
           serialPort: boardForm.serialPort || undefined,
           cameraDevice: boardForm.cameraDevice || undefined,
+          boardImageUrl: boardForm.boardImageUrl || undefined,
+          blankBitstreamPath: boardForm.blankBitstreamPath || undefined,
         }),
       });
 
       const data = await res.json();
 
       if (res.ok) {
-        setMessage("Board added successfully!");
-        setBoardForm({
-          name: "",
-          fpgaFamily: "",
-          boardType: "",
-          connectionType: "jtag",
-          devicePath: "",
-          serialPort: "",
-          cameraDevice: "",
-          programmingTool: "openFPGALoader",
-          capabilities: [],
-          sessionTimeoutMinutes: 30,
-        });
+        setMessage(
+          editingBoardId ? "Board updated successfully!" : "Board added successfully!"
+        );
+        resetBoardForm();
         fetchData();
         setTab("boards");
       } else {
         setMessage(`Error: ${data.error}`);
       }
     } catch {
-      setMessage("Failed to add board");
+      setMessage(editingBoardId ? "Failed to update board" : "Failed to add board");
     }
   }
 
@@ -151,6 +218,27 @@ export default function AdminPage() {
     }
   }
 
+  async function handleDeleteUser(userId: string) {
+    if (!confirm("Are you sure you want to delete this user? This action cannot be undone.")) return;
+    
+    setUpdatingRole(userId);
+    try {
+      const res = await fetch(`/api/admin/users?userId=${userId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        fetchData();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to delete user");
+      }
+    } catch {
+      alert("Failed to delete user");
+    } finally {
+      setUpdatingRole(null);
+    }
+  }
+
   function toggleCapability(cap: string) {
     setBoardForm((prev) => ({
       ...prev,
@@ -165,6 +253,18 @@ export default function AdminPage() {
     { id: "users" as const, label: "Users" },
     { id: "add-board" as const, label: "+ Add Board" },
   ];
+
+  const boardCounts = boards.reduce(
+    (acc, board) => {
+      acc.total += 1;
+      if (board.status === "free") acc.free += 1;
+      if (board.status === "busy") acc.busy += 1;
+      if (board.status === "offline") acc.offline += 1;
+      if (board.blankBitstreamPath) acc.blankConfigured += 1;
+      return acc;
+    },
+    { total: 0, free: 0, busy: 0, offline: 0, blankConfigured: 0 }
+  );
 
   return (
     <div className="min-h-screen">
@@ -206,6 +306,19 @@ export default function AdminPage() {
         {/* Boards tab */}
         {tab === "boards" && (
           <div>
+            <div className="card mb-4">
+              <div className="flex flex-wrap items-center gap-4 text-sm">
+                <span className="font-semibold">Boards:</span>
+                <span>Total {boardCounts.total}</span>
+                <span className="text-success">Free {boardCounts.free}</span>
+                <span className="text-warning">Busy {boardCounts.busy}</span>
+                <span className="text-danger">Offline {boardCounts.offline}</span>
+                <span>Blank set {boardCounts.blankConfigured}</span>
+              </div>
+              <p className="text-xs text-muted mt-2">
+                Tip: Set a per-board blank bitstream to auto-clean hardware after sessions.
+              </p>
+            </div>
             {loading ? (
               <div className="text-muted">Loading boards...</div>
             ) : boards.length === 0 ? (
@@ -240,8 +353,16 @@ export default function AdminPage() {
                         <span>{board.fpgaFamily}</span>
                         <span>Type: {board.boardType}</span>
                         <span>Tool: {board.programmingTool}</span>
+                        {board.blankBitstreamPath ? (
+                          <span>Blank: set</span>
+                        ) : (
+                          <span>Blank: not set</span>
+                        )}
                         {board.devicePath && (
                           <span>Device: {board.devicePath}</span>
+                        )}
+                        {board.ipAddress && (
+                          <span>IP: {board.ipAddress}</span>
                         )}
                         {board.serialPort && (
                           <span>UART: {board.serialPort}</span>
@@ -249,7 +370,24 @@ export default function AdminPage() {
                         {board.cameraDevice && (
                           <span>Camera: {board.cameraDevice}</span>
                         )}
+                        {board.boardImageUrl && (
+                          <span>Image: configured</span>
+                        )}
                       </div>
+                      {board.boardImageUrl && (
+                        <div className="mt-3">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={board.boardImageUrl}
+                            alt={`${board.name} preview`}
+                            className="h-16 w-24 rounded object-cover border border-border"
+                            loading="lazy"
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                            }}
+                          />
+                        </div>
+                      )}
                       {board.capabilities.length > 0 && (
                         <div className="flex gap-1 mt-2">
                           {board.capabilities.map((cap) => (
@@ -263,12 +401,20 @@ export default function AdminPage() {
                         </div>
                       )}
                     </div>
-                    <button
-                      onClick={() => handleDeleteBoard(board.id)}
-                      className="text-danger hover:text-danger/80 text-sm ml-4"
-                    >
-                      Delete
-                    </button>
+                    <div className="ml-4 flex items-center gap-3">
+                      <button
+                        onClick={() => handleEditBoard(board)}
+                        className="text-primary hover:text-primary/80 text-sm"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteBoard(board.id)}
+                        className="text-danger hover:text-danger/80 text-sm"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -283,6 +429,88 @@ export default function AdminPage() {
               <div className="text-muted">Loading users...</div>
             ) : (
               <div className="overflow-x-auto">
+                <div className="mb-4">
+                  <button
+                    onClick={() => { setShowCreateUser(!showCreateUser); setCreateError(""); }}
+                    className="btn-primary"
+                  >
+                    {showCreateUser ? "Hide Create User" : "Create User"}
+                  </button>
+                </div>
+
+                {showCreateUser && (
+                  <div className="card mb-4 p-4">
+                    {createError && (
+                      <div className="text-sm text-danger mb-2">{createError}</div>
+                    )}
+                    <div className="grid grid-cols-3 gap-3">
+                      <input
+                        className="input-field"
+                        placeholder="Full name"
+                        value={createName}
+                        onChange={(e) => setCreateName(e.target.value)}
+                      />
+                      <input
+                        className="input-field"
+                        placeholder="email@vardhaman.org"
+                        value={createEmail}
+                        onChange={(e) => setCreateEmail(e.target.value)}
+                      />
+                      <input
+                        className="input-field"
+                        placeholder="Password (min 8)"
+                        value={createPassword}
+                        onChange={(e) => setCreatePassword(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex items-center gap-3 mt-3">
+                      <select
+                        value={createRole}
+                        onChange={(e) => setCreateRole(e.target.value as "student" | "researcher" | "admin")}
+                        className="input-field w-40"
+                      >
+                        <option value="student">student</option>
+                        <option value="researcher">researcher</option>
+                        <option value="admin">admin</option>
+                      </select>
+                      <div className="flex-1" />
+                      <button
+                        onClick={async () => {
+                          setCreateError("");
+                          if (!createName || !createEmail || createPassword.length < 8) {
+                            setCreateError("Please provide name, valid email, and password (min 8)");
+                            return;
+                          }
+                          // No client-side domain restriction for admin-created users
+                          setCreateLoading(true);
+                          try {
+                            const res = await fetch('/api/admin/users', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ name: createName, email: createEmail, password: createPassword, role: createRole })
+                            });
+                            const data = await res.json();
+                            if (!res.ok) {
+                              setCreateError(data.error || 'Failed to create user');
+                            } else {
+                              setShowCreateUser(false);
+                              setCreateName(''); setCreateEmail(''); setCreatePassword(''); setCreateRole('student');
+                              fetchData();
+                            }
+                          } catch {
+                            setCreateError('Network error');
+                          } finally {
+                            setCreateLoading(false);
+                          }
+                        }}
+                        className="btn-primary"
+                        disabled={createLoading}
+                      >
+                        {createLoading ? 'Creating...' : 'Create User'}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border text-left">
@@ -292,6 +520,7 @@ export default function AdminPage() {
                       <th className="pb-3 font-medium text-muted">Role</th>
                       <th className="pb-3 font-medium text-muted">Verified</th>
                       <th className="pb-3 font-medium text-muted">Joined</th>
+                      <th className="pb-3 font-medium text-muted text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -330,6 +559,15 @@ export default function AdminPage() {
                         <td className="py-3 text-muted">
                           {new Date(user.createdAt).toLocaleDateString()}
                         </td>
+                        <td className="py-3 text-right">
+                          <button
+                            onClick={() => handleDeleteUser(user.id)}
+                            disabled={updatingRole === user.id}
+                            className="text-danger hover:text-danger/80 text-xs font-medium"
+                          >
+                            Delete
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -341,9 +579,13 @@ export default function AdminPage() {
 
         {/* Add board tab */}
         {tab === "add-board" && (
-          <form onSubmit={handleAddBoard} className="max-w-2xl space-y-6">
-            <div className="card space-y-4">
-              <h2 className="font-semibold text-lg">Board Information</h2>
+          <div className="max-w-4xl grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 space-y-6">
+              <form onSubmit={handleSaveBoard} className="space-y-6">
+                <div className="card space-y-4">
+                  <h2 className="font-semibold text-lg">
+                    {editingBoardId ? "Edit Board" : "Board Information"}
+                  </h2>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -414,6 +656,42 @@ export default function AdminPage() {
                   </select>
                 </div>
               </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5">
+                  Board Image URL
+                </label>
+                <input
+                  type="text"
+                  value={boardForm.boardImageUrl}
+                  onChange={(e) =>
+                    setBoardForm({ ...boardForm, boardImageUrl: e.target.value })
+                  }
+                  placeholder="https://example.com/fpga-board.jpg"
+                  className="input-field"
+                />
+                <p className="text-xs text-muted mt-1">
+                  Optional: image shown on dashboard board cards.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5">
+                  Blank Bitstream Path
+                </label>
+                <input
+                  type="text"
+                  value={boardForm.blankBitstreamPath}
+                  onChange={(e) =>
+                    setBoardForm({ ...boardForm, blankBitstreamPath: e.target.value })
+                  }
+                  placeholder="/opt/bitstreams/blank.bit"
+                  className="input-field"
+                />
+                <p className="text-xs text-muted mt-1">
+                  Optional: programmed when the session ends.
+                </p>
+              </div>
             </div>
 
             <div className="card space-y-4">
@@ -430,6 +708,21 @@ export default function AdminPage() {
                     setBoardForm({ ...boardForm, devicePath: e.target.value })
                   }
                   placeholder="e.g. /dev/ttyUSB0"
+                  className="input-field"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5">
+                  IP Address (for SoC boards e.g. PYNQ)
+                </label>
+                <input
+                  type="text"
+                  value={boardForm.ipAddress}
+                  onChange={(e) =>
+                    setBoardForm({ ...boardForm, ipAddress: e.target.value })
+                  }
+                  placeholder="e.g. 192.168.2.99"
                   className="input-field"
                 />
               </div>
@@ -535,10 +828,151 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <button type="submit" className="btn-primary w-full">
-              Add Board
-            </button>
+            <div className="flex items-center gap-3">
+              <button type="submit" className="btn-primary flex-1">
+                {editingBoardId ? "Update Board" : "Add Board"}
+              </button>
+              {editingBoardId && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={resetBoardForm}
+                >
+                  Cancel Edit
+                </button>
+              )}
+            </div>
           </form>
+          </div>
+
+          {/* Setup Assistant Side Panel */}
+          <div className="lg:col-span-1 space-y-6">
+            <div className="card sticky top-8">
+              <div className="flex items-center justify-between mb-4 pb-2 border-b border-white/5">
+                <h3 className="font-semibold flex items-center gap-2">
+                  <span className="text-primary">🛠️</span> Setup Assistant
+                </h3>
+                <button 
+                  type="button"
+                  onClick={handleDetect}
+                  disabled={detecting}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                    detecting 
+                    ? "bg-muted/10 text-muted cursor-not-allowed" 
+                    : "bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 active:scale-95"
+                  }`}
+                >
+                  {detecting ? (
+                    <>
+                      <span className="animate-spin text-sm">🔄</span>
+                      SCANNING...
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-sm">🔍</span>
+                      SCAN HARDWARE
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {!detectedDevices && !detecting && (
+                <p className="text-xs text-muted leading-relaxed">
+                  Click <b>SCAN HARDWARE</b> to auto-detect connected FPGA boards, UART ports, and cameras.
+                </p>
+              )}
+
+              {detecting && (
+                <div className="py-8 text-center">
+                  <div className="animate-spin text-2xl mb-2">🔄</div>
+                  <p className="text-xs text-muted">Probing JTAG and USB ports...</p>
+                </div>
+              )}
+
+              {detectedDevices && (
+                <div className="space-y-6">
+                  {/* JTAG Hardware */}
+                  <div>
+                    <h4 className="text-[10px] font-bold text-muted uppercase tracking-wider mb-2">Detected FPGAs</h4>
+                    {detectedDevices.hardware.length === 0 ? (
+                      <p className="text-xs text-muted italic">No JTAG devices found.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {detectedDevices.hardware.map((h, i) => (
+                          <div key={i} className="p-2 rounded bg-background border border-border">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs font-mono font-bold text-primary">{h.idcode}</span>
+                              {h.template && (
+                                <button 
+                                  type="button"
+                                  onClick={() => applyTemplate(h)}
+                                  className="text-[10px] bg-primary text-white px-1.5 py-0.5 rounded font-bold"
+                                >
+                                  USE TEMPLATE
+                                </button>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-muted truncate">{h.description}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* UART Ports */}
+                  <div>
+                    <h4 className="text-[10px] font-bold text-muted uppercase tracking-wider mb-2">Available UART Ports</h4>
+                    <div className="flex flex-wrap gap-1">
+                      {detectedDevices.serialPorts.map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setBoardForm({ ...boardForm, serialPort: p })}
+                          className="text-[10px] px-2 py-1 rounded bg-background border border-border hover:border-primary transition-colors"
+                        >
+                          {p.replace("/dev/", "")}
+                        </button>
+                      ))}
+                      {detectedDevices.serialPorts.length === 0 && (
+                        <p className="text-xs text-muted italic">No serial ports found.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Cameras */}
+                  <div>
+                    <h4 className="text-[10px] font-bold text-muted uppercase tracking-wider mb-2">Video Devices</h4>
+                    <div className="flex flex-wrap gap-1">
+                      {detectedDevices.cameras.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setBoardForm({ ...boardForm, cameraDevice: c })}
+                          className="text-[10px] px-2 py-1 rounded bg-background border border-border hover:border-primary transition-colors"
+                        >
+                          {c.replace("/dev/", "")}
+                        </button>
+                      ))}
+                      {detectedDevices.cameras.length === 0 && (
+                        <p className="text-xs text-muted italic">No cameras found.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Raw detection output */}
+                  {detectedDevices.rawOutput && (
+                    <div>
+                      <h4 className="text-[10px] font-bold text-muted uppercase tracking-wider mb-2">Detector Output</h4>
+                      <pre className="text-[10px] bg-background border border-border rounded p-2 max-h-40 overflow-auto whitespace-pre-wrap">
+                        {detectedDevices.rawOutput}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
         )}
       </main>
     </div>
