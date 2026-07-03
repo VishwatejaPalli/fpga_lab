@@ -90,15 +90,16 @@ export default function BoardCard({ board, onSelect }: BoardCardProps) {
 
   return (
     <div
-      className="card cursor-pointer transition-all hover:shadow-lg active:scale-[0.98] touch-manipulation"
+      className="card cursor-pointer group transition-all hover:shadow-[0_8px_30px_rgba(59,130,246,0.2)] active:scale-[0.98] touch-manipulation"
       onClick={() => onSelect?.(board.id)}
     >
-      <div className="mb-4 overflow-hidden rounded-lg border border-border bg-background">
+      <div className="mb-4 overflow-hidden rounded-lg border border-border bg-background/50 relative group-hover:border-accent/50 transition-colors">
+        <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent opacity-0 dark:opacity-60 z-10 transition-opacity"></div>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={boardImageUrl}
           alt={boardImageAlt}
-          className="h-32 w-full object-cover"
+          className="h-36 w-full object-cover dark:mix-blend-screen group-hover:scale-105 transition-transform duration-500"
           loading="lazy"
           onError={(e) => {
             const img = e.currentTarget;
@@ -109,15 +110,15 @@ export default function BoardCard({ board, onSelect }: BoardCardProps) {
       </div>
 
       <div className="flex items-start justify-between mb-3">
-        <div>
-          <h3 className="font-semibold text-lg">{board.name}</h3>
+        <div className="z-20 relative">
+          <h3 className="font-semibold text-lg text-foreground group-hover:text-accent transition-colors">{board.name}</h3>
           <p className="text-muted text-sm">{board.fpgaFamily}</p>
         </div>
         <span className={`badge badge-${board.status}`}>{board.status}</span>
       </div>
 
       <div className="flex items-center gap-1.5 mb-4">
-        <span className="text-xs text-muted bg-background px-2 py-0.5 rounded">
+        <span className="text-[10px] font-mono tracking-wider uppercase text-accent bg-accent/10 border border-accent/20 px-2 py-0.5 rounded shadow-[0_0_8px_rgba(139,92,246,0.1)]">
           {board.boardType}
         </span>
       </div>
@@ -149,13 +150,13 @@ export default function BoardCard({ board, onSelect }: BoardCardProps) {
       )}
 
       {board.status === "busy" && (
-        <div className="text-center text-sm text-warning py-2">
+        <div className="text-center text-sm font-medium text-amber-400/80 py-2 bg-amber-500/5 rounded-lg border border-amber-500/10 mt-2">
           Currently in use
         </div>
       )}
 
       {board.status === "offline" && (
-        <div className="text-center text-sm text-danger py-2">
+        <div className="text-center text-sm font-medium text-red-400/80 py-2 bg-red-500/5 rounded-lg border border-red-500/10 mt-2">
           Board offline
         </div>
       )}

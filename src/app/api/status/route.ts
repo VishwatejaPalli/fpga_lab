@@ -3,8 +3,9 @@ import { getSession } from "@/lib/auth/session";
 import db from "@/lib/db";
 import { boards, jobs, hwSessions, users } from "@/lib/db/schema";
 import { sql, eq } from "drizzle-orm";
+import { withErrorHandler } from "@/lib/api-utils";
 
-export async function GET() {
+export const GET = withErrorHandler(async () => {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -76,4 +77,4 @@ export async function GET() {
     recentJobs,
     totalUsers,
   });
-}
+});

@@ -17,6 +17,44 @@ interface HWSession {
   status: string;
 }
 
+interface Telemetry {
+  cpu: {
+    temp: string;
+    load: string[];
+    freq: string;
+  };
+  memory: {
+    total: string;
+    used: string;
+    available: string;
+    percent: string;
+  };
+  fpga: {
+    overlay: string;
+    vccint: string;
+    vccaux: string;
+    vccbram: string;
+    clock: string;
+  };
+  power: {
+    vccpint: string;
+    vccpaux: string;
+  };
+  network: {
+    ip: string;
+    uptime: string;
+    rxBytes: string;
+    txBytes: string;
+  };
+  disk: {
+    total: string;
+    used: string;
+    available: string;
+    percent: string;
+  };
+  timestamp: string;
+}
+
 export default function JupyterPage({ params }: { params: Promise<{ boardId: string }> }) {
   const { boardId } = use(params);
   const safeBoardId = typeof boardId === "string" ? boardId : "";
@@ -29,6 +67,27 @@ export default function JupyterPage({ params }: { params: Promise<{ boardId: str
   const [timeRemaining, setTimeRemaining] = useState<string | null>(null);
   const [outputs, setOutputs] = useState<string[]>([]);
   const [autoOpened, setAutoOpened] = useState(false);
+  const [telemetry, setTelemetry] = useState<Telemetry | null>(null);
+
+  useEffect(() => {
+    if (!safeBoardId || error) return;
+
+    async function fetchTelemetry() {
+      try {
+        const res = await fetch(`/api/pynq/${safeBoardId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setTelemetry(data.telemetry);
+        }
+      } catch (err) {
+        console.error("Failed to fetch PYNQ telemetry:", err);
+      }
+    }
+
+    fetchTelemetry();
+    const interval = setInterval(fetchTelemetry, 3000);
+    return () => clearInterval(interval);
+  }, [safeBoardId, error]);
 
   useEffect(() => {
     if (!safeBoardId) return;
@@ -112,6 +171,20 @@ export default function JupyterPage({ params }: { params: Promise<{ boardId: str
     }
   }, [jupyterUrl, autoOpened]);
 
+  async function handleEndSession() {
+    if (!session) return;
+    try {
+      await fetch("/api/sessions", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.id }),
+      });
+      router.push("/dashboard");
+    } catch (err) {
+      console.error("Failed to end session:", err);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -127,19 +200,42 @@ export default function JupyterPage({ params }: { params: Promise<{ boardId: str
               Jupyter session for {board?.boardType || "pynq"} • Board ID {safeBoardId ? safeBoardId.slice(0, 8) : "--"}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => window.location.reload()}
-              className="btn-secondary text-sm"
-            >
-              Reset Connection
-            </button>
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="btn-primary text-sm"
-            >
-              Leave Lab
-            </button>
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+            {session && (
+              <div className="bg-background/50 rounded-xl px-4 py-2 border border-border/50 backdrop-blur-sm shadow-inner">
+                <div className="text-[10px] uppercase tracking-wider text-muted font-bold mb-1">Session Expires In</div>
+                <div className={`text-xl font-mono font-bold tracking-tight ${
+                    timeRemaining === "Expired"
+                      ? "text-danger"
+                      : timeRemaining && parseInt(timeRemaining) < 5
+                        ? "text-warning animate-pulse"
+                        : "text-success"
+                  }`}
+                >
+                  {timeRemaining || "..."}
+                </div>
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => window.location.reload()}
+                className="btn-secondary text-sm"
+              >
+                Reset Connection
+              </button>
+              <button
+                onClick={() => router.push(`/monitor/${safeBoardId}`)}
+                className="btn-primary flex items-center gap-2 text-sm"
+              >
+                <span>📟</span> Monitor
+              </button>
+              <button
+                onClick={handleEndSession}
+                className="btn-danger flex items-center gap-2 text-sm shadow-lg shadow-danger/20 transition-transform active:scale-95"
+              >
+                <span>⏹</span> End Session
+              </button>
+            </div>
           </div>
         </div>
 
@@ -224,19 +320,110 @@ export default function JupyterPage({ params }: { params: Promise<{ boardId: str
                 </div>
               </div>
             ) : (
-              <div className="flex h-full flex-col">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="font-semibold">Outputs</h2>
-                  <span className="text-xs text-muted">System feed</span>
-                </div>
-                <div className="flex-1 bg-background border border-border rounded-lg p-3 font-mono text-xs overflow-y-auto">
-                  {outputs.length === 0 ? (
-                    <div className="text-muted">No output yet.</div>
-                  ) : (
-                    outputs.map((line, idx) => (
-                      <div key={idx} className="whitespace-pre-wrap leading-relaxed">{line}</div>
-                    ))
-                  )}
+              <div className="flex h-full flex-col gap-6">
+                {/* Real-time Telemetry Dashboard */}
+                {telemetry && (
+                  <div>
+                    <h2 className="font-semibold mb-3 flex items-center gap-1.5 text-sm">
+                      <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                      Live PYNQ Board Telemetry
+                    </h2>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {/* CPU Stats */}
+                      <div className="bg-background border border-border rounded-xl p-4 shadow-sm flex flex-col justify-between">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10px] font-bold text-muted uppercase tracking-wider">CPU Stats</span>
+                          <span className="text-sm">💻</span>
+                        </div>
+                        <div>
+                          <div className="text-lg font-bold text-foreground">{telemetry.cpu.freq}</div>
+                          <div className="text-[10px] text-muted mt-0.5">Load: {telemetry.cpu.load.join(", ")}</div>
+                        </div>
+                        <div className="mt-3 flex items-center justify-between">
+                          <span className="text-[10px] text-muted">Temp:</span>
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                            parseFloat(telemetry.cpu.temp) > 48 
+                              ? "bg-red-100 text-red-700" 
+                              : "bg-green-100 text-green-700"
+                          }`}>
+                            {telemetry.cpu.temp}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Memory Stats */}
+                      <div className="bg-background border border-border rounded-xl p-4 shadow-sm flex flex-col justify-between">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Memory</span>
+                          <span className="text-sm">🧠</span>
+                        </div>
+                        <div>
+                          <div className="text-lg font-bold text-foreground">{telemetry.memory.percent}</div>
+                          <div className="text-[10px] text-muted mt-0.5">{telemetry.memory.used} / {telemetry.memory.total}</div>
+                        </div>
+                        <div className="mt-3">
+                          <div className="w-full bg-gray-100 rounded-full h-1 overflow-hidden">
+                            <div 
+                              className="bg-purple-500 h-1 rounded-full transition-all duration-500" 
+                              style={{ width: telemetry.memory.percent }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* FPGA Overlay */}
+                      <div className="bg-background border border-border rounded-xl p-4 shadow-sm flex flex-col justify-between">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10px] font-bold text-muted uppercase tracking-wider">FPGA Overlay</span>
+                          <span className="text-sm">⚡</span>
+                        </div>
+                        <div>
+                          <div className="text-xs font-mono font-bold text-foreground truncate bg-gray-50 border px-1 rounded mt-0.5">{telemetry.fpga.overlay}</div>
+                          <div className="text-[10px] text-muted mt-0.5">Clock: {telemetry.fpga.clock}</div>
+                        </div>
+                        <div className="mt-3 flex items-center justify-between">
+                          <span className="text-[10px] text-muted">Power:</span>
+                          <span className="text-[10px] font-bold text-amber-600">{telemetry.fpga.vccint}</span>
+                        </div>
+                      </div>
+
+                      {/* Network */}
+                      <div className="bg-background border border-border rounded-xl p-4 shadow-sm flex flex-col justify-between">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10px] font-bold text-muted uppercase tracking-wider">System Net</span>
+                          <span className="text-sm">🌐</span>
+                        </div>
+                        <div>
+                          <div className="text-xs font-mono font-bold text-foreground">{telemetry.network.ip}</div>
+                          <div className="text-[10px] text-muted mt-0.5">Uptime: {telemetry.network.uptime}</div>
+                        </div>
+                        <div className="mt-3 flex items-center justify-between">
+                          <span className="text-[10px] text-muted">Status:</span>
+                          <span className="text-[10px] text-green-600 font-semibold flex items-center gap-0.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                            online
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Outputs section */}
+                <div className="flex-1 flex flex-col min-h-[240px]">
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="font-semibold text-sm">Outputs</h2>
+                    <span className="text-[10px] text-muted">System feed</span>
+                  </div>
+                  <div className="flex-1 bg-background border border-border rounded-lg p-3 font-mono text-xs overflow-y-auto max-h-[300px]">
+                    {outputs.length === 0 ? (
+                      <div className="text-muted">No output yet.</div>
+                    ) : (
+                      outputs.map((line, idx) => (
+                        <div key={idx} className="whitespace-pre-wrap leading-relaxed">{line}</div>
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
             )}

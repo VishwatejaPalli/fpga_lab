@@ -6,6 +6,7 @@ export interface ProgramOptions {
   bitstreamPath: string;
   programmingTool?: string; // defaults to "openFPGALoader"
   devicePath?: string | null;
+  ipAddress?: string | null;
   timeout?: number; // ms, default 120000
 }
 
@@ -39,14 +40,32 @@ export class FPGAProgrammer extends EventEmitter {
     let logs = "";
 
     return new Promise((resolve) => {
-      const args = this.buildArgs(programmingTool, boardType, bitstreamPath, devicePath);
-
-      this.emit("log", `[FPGA] Starting: ${programmingTool} ${args.join(" ")}\n`);
-
-      this.process = spawn(programmingTool, args, {
-        timeout,
-        env: { ...process.env },
-      });
+      // Handle bash script execution for pynq_ssh
+      if (programmingTool === "pynq_ssh") {
+        if (!options.ipAddress) {
+          const errorMsg = "\n[FPGA] Error: IP Address is required for pynq_ssh\n";
+          this.emit("log", errorMsg);
+          return resolve({ success: false, exitCode: 1, logs: errorMsg, duration: 0 });
+        }
+        
+        const remoteScript = `python3 -c "from pynq import Overlay; Overlay('/home/xilinx/lab_bitstream.bit')"`;
+        const bashCmd = `scp -o StrictHostKeyChecking=no ${bitstreamPath} xilinx@${options.ipAddress}:/home/xilinx/lab_bitstream.bit && ssh -o StrictHostKeyChecking=no xilinx@${options.ipAddress} '${remoteScript}'`;
+        
+        this.emit("log", `[FPGA] Starting: SCP & SSH to ${options.ipAddress}\n`);
+        
+        this.process = spawn("bash", ["-c", bashCmd], {
+          timeout,
+          env: { ...process.env },
+        });
+      } else {
+        const args = this.buildArgs(programmingTool, boardType, bitstreamPath, devicePath, options.ipAddress);
+        this.emit("log", `[FPGA] Starting: ${programmingTool} ${args.join(" ")}\n`);
+  
+        this.process = spawn(programmingTool, args, {
+          timeout,
+          env: { ...process.env },
+        });
+      }
 
       this.process.stdout?.on("data", (data: Buffer) => {
         const text = data.toString();
@@ -110,7 +129,8 @@ export class FPGAProgrammer extends EventEmitter {
     tool: string,
     boardType: string,
     bitstreamPath: string,
-    devicePath?: string | null
+    devicePath?: string | null,
+    ipAddress?: string | null
   ): string[] {
     switch (tool) {
       case "openFPGALoader":
@@ -129,6 +149,15 @@ export class FPGAProgrammer extends EventEmitter {
       case "quartus_pgm":
         // Intel/Altera Programmer
         return ["-m", "jtag", "-o", `P;${bitstreamPath}`];
+
+      case "xvc":
+        // Xilinx Virtual Cable via openFPGALoader
+        const xvcArgs = ["-c", "xvc"];
+        if (ipAddress) {
+          xvcArgs.push("--xvc-url", `${ipAddress}:2542`);
+        }
+        xvcArgs.push(bitstreamPath);
+        return xvcArgs;
 
       default:
         // Generic: just pass the bitstream as argument

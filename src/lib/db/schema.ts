@@ -7,10 +7,14 @@ export const users = sqliteTable("users", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   name: text("name").notNull(),
-  role: text("role", { enum: ["student", "researcher", "admin"] })
+  role: text("role", { enum: ["student", "researcher", "admin", "guest"] })
     .notNull()
     .default("student"),
   verified: integer("verified", { mode: "boolean" }).notNull().default(false),
+  status: text("status", { enum: ["active", "suspended"] })
+    .notNull()
+    .default("active"),
+  lastLogin: text("last_login"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),
@@ -54,7 +58,9 @@ export const boards = sqliteTable("boards", {
   boardImageUrl: text("board_image_url"), // optional image URL shown in UI
   blankBitstreamPath: text("blank_bitstream_path"), // optional path to safe bitstream
   programmingTool: text("programming_tool").default("openFPGALoader"), // tool override
-  status: text("status", { enum: ["free", "busy", "offline"] })
+  sshUsername: text("ssh_username"), // For network boards (e.g. "xilinx")
+  sshPassword: text("ssh_password"), // For network boards (e.g. "xilinx")
+  status: text("status", { enum: ["free", "busy", "offline", "allocated", "programming"] })
     .notNull()
     .default("free"),
   currentSessionId: text("current_session_id"),

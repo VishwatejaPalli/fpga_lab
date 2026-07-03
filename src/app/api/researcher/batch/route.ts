@@ -14,7 +14,7 @@ interface CountRow {
   c: number;
 }
 
-// GET — list user's batch jobs
+// GET — list user's batch jobs with constituent sub-jobs
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -26,7 +26,19 @@ export async function GET() {
     .prepare("SELECT * FROM batch_jobs WHERE user_id = ? ORDER BY created_at DESC LIMIT 20")
     .all(session.userId);
 
-  return NextResponse.json({ batches });
+  const batchesWithJobs = batches.map((batch: any) => {
+    const jobs = sqlite
+      .prepare(`
+        SELECT j.id, j.board_id, j.status, j.created_at, j.completed_at, b.name as board_name
+        FROM jobs j
+        JOIN boards b ON j.board_id = b.id
+        WHERE j.batch_id = ?
+      `)
+      .all(batch.id);
+    return { ...batch, jobs };
+  });
+
+  return NextResponse.json({ batches: batchesWithJobs });
 }
 
 // POST — batch program multiple boards

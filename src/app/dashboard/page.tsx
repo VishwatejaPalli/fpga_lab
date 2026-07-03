@@ -91,7 +91,7 @@ export default function DashboardPage() {
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold">Dashboard</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent drop-shadow-md">Dashboard</h1>
             <p className="text-muted mt-1 text-sm sm:text-base">
               Available FPGA boards for remote access
             </p>
@@ -105,23 +105,27 @@ export default function DashboardPage() {
 
         <div className="card mb-6 sm:mb-8 p-4">
           <div className="flex flex-wrap items-center gap-3 text-sm">
-            <span className="text-muted uppercase tracking-wider text-xs">Status legend</span>
+            <span className="text-muted uppercase tracking-wider text-xs font-semibold mr-2">Status legend</span>
             <span className="badge badge-free">Free</span>
-            <span className="text-muted">Available for reservation</span>
+            <span className="text-muted text-xs">Available</span>
             <span className="badge badge-busy">Busy</span>
-            <span className="text-muted">Active session running</span>
+            <span className="text-muted text-xs">In use</span>
             <span className="badge badge-offline">Offline</span>
-            <span className="text-muted">Hardware unreachable</span>
+            <span className="text-muted text-xs">Unreachable</span>
           </div>
         </div>
 
         {/* Active session banner */}
         {activeSession && (
-          <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 mb-6 sm:mb-8">
+          <div className="relative overflow-hidden border border-accent/30 rounded-xl p-4 mb-6 sm:mb-8 shadow-[0_0_20px_rgba(139,92,246,0.15)] bg-background/80 dark:bg-[#0b0f19]/80 backdrop-blur-md">
+            <div className="absolute top-[-50%] left-[-10%] w-[40%] h-[200%] bg-accent/10 blur-[40px] pointer-events-none animate-pulse"></div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="font-semibold text-primary">Active Session</h3>
-                <p className="text-sm text-muted mt-1">
+                <h3 className="font-semibold text-accent flex items-center gap-2">
+                  <span className="flex h-2.5 w-2.5 rounded-full bg-accent shadow-[0_0_8px_rgba(139,92,246,0.8)] animate-pulse"></span>
+                  Active Session
+                </h3>
+                <p className="text-sm text-muted mt-2">
                   Board: {activeSession.boardId.slice(0, 8)}... — Expires:{" "}
                   {new Date(activeSession.expiresAt).toLocaleTimeString()}
                 </p>
@@ -148,22 +152,22 @@ export default function DashboardPage() {
 
         {/* Board grid */}
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 relative z-10">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="card animate-pulse h-48" />
+              <div key={i} className="card animate-pulse h-64 border-border bg-card" />
             ))}
           </div>
         ) : boards.length === 0 ? (
           <div className="text-center py-20">
-            <div className="text-5xl mb-4">🔌</div>
-            <h2 className="text-xl font-semibold mb-2">No boards available</h2>
+            <div className="text-5xl mb-4 opacity-50">🔌</div>
+            <h2 className="text-xl font-semibold mb-2 text-foreground">No boards available</h2>
             <p className="text-muted">
               No FPGA boards have been registered yet. Ask your administrator
               to add boards.
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 relative z-10">
             {boards.map((board) => (
               <BoardCard
                 key={board.id}

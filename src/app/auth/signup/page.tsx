@@ -47,11 +47,11 @@ export default function SignupPage() {
       <div className="auth-bg min-h-screen flex items-center justify-center px-4">
         <div className="auth-slideshow" />
         <div className="relative z-10 w-full max-w-md">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-10 text-center">
+          <div className="card p-8 md:p-10 text-center">
             <div className="text-5xl mb-4">📧</div>
-            <h1 className="text-2xl font-bold text-gray-800 mb-2">Check your email</h1>
-            <p className="text-gray-500 mb-6">
-              We sent a verification link to <strong className="text-gray-800">{email}</strong>. Click the
+            <h1 className="text-2xl font-bold text-foreground mb-2">Check your email</h1>
+            <p className="text-muted mb-6">
+              We sent a verification link to <strong className="text-foreground">{email}</strong>. Click the
               link to activate your account.
             </p>
             <Link href="/auth/login" className="btn-primary inline-block">
@@ -68,14 +68,14 @@ export default function SignupPage() {
       {/* Animated sliding background */}
       <div className="auth-slideshow" />
       <div className="relative z-10 w-full max-w-md">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-10">
+        <div className="bg-white/90 backdrop-blur-xl border border-slate-200 p-8 md:p-10 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.05)] relative overflow-hidden">
           {/* Logo & branding */}
           <div className="text-center mb-8">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/vce-logo.png"
               alt="VCE - Vardhaman College of Engineering"
-              className="w-28 h-auto mx-auto mb-4"
+              className="relative w-24 h-auto mx-auto mb-4 drop-shadow-sm mix-blend-multiply"
             />
             <h1 className="text-xl font-bold text-primary tracking-wide">
               FPGA Remote Lab
@@ -88,7 +88,7 @@ export default function SignupPage() {
           </h2>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm mb-4">
+            <div className="bg-red-50 border border-red-200 text-red-600 rounded-lg px-4 py-3 text-sm mb-4">
               {error}
             </div>
           )}
@@ -96,7 +96,7 @@ export default function SignupPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Role selector */}
             <div>
-              <label className="block text-sm font-medium text-gray-600 mb-2">
+              <label className="block text-sm font-medium text-muted mb-2">
                 I am a
               </label>
               <div className="grid grid-cols-2 gap-3">
@@ -106,7 +106,7 @@ export default function SignupPage() {
                   className={`p-3 rounded-xl border-2 text-center transition-all ${
                     role === "student"
                       ? "border-primary bg-primary/5 text-primary"
-                      : "border-gray-200 text-gray-500 hover:border-gray-300"
+                      : "border-border text-muted hover:border-foreground"
                   }`}
                 >
                   <div className="text-lg mb-0.5">🎓</div>
@@ -119,7 +119,7 @@ export default function SignupPage() {
                   className={`p-3 rounded-xl border-2 text-center transition-all ${
                     role === "researcher"
                       ? "border-primary bg-primary/5 text-primary"
-                      : "border-gray-200 text-gray-500 hover:border-gray-300"
+                      : "border-border text-muted hover:border-foreground"
                   }`}
                 >
                   <div className="text-lg mb-0.5">🔬</div>
@@ -135,7 +135,7 @@ export default function SignupPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Full Name"
-                className="input-field"
+                className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all placeholder:text-slate-400 shadow-inner"
                 required
               />
             </div>
@@ -146,7 +146,7 @@ export default function SignupPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="College Email (vardhaman.org)"
-                className="input-field"
+                className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all placeholder:text-slate-400 shadow-inner"
                 required
               />
             </div>
@@ -157,7 +157,7 @@ export default function SignupPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Password (min 8 characters)"
-                className="input-field pr-12"
+                className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all placeholder:text-slate-400 shadow-inner pr-12"
                 minLength={8}
                 required
               />
@@ -184,18 +184,18 @@ export default function SignupPage() {
           </form>
 
           <div className="mt-6 text-center">
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-slate-500">
               Already have an account?{" "}
-              <Link href="/auth/login" className="text-primary font-semibold hover:underline">
+              <Link href="/auth/login" className="text-blue-600 font-semibold hover:text-blue-700 hover:underline">
                 Log in
               </Link>
             </p>
           </div>
 
           {/* Footer */}
-          <div className="mt-8 pt-4 border-t border-gray-100 text-center">
-            <p className="text-xs text-gray-400">
-              Powered by <span className="font-semibold text-primary">FPGA Remote Lab</span>
+          <div className="mt-8 pt-4 border-t border-slate-200 text-center">
+            <p className="text-xs text-slate-400">
+              Powered by <span className="font-semibold text-blue-600">FPGA Remote Lab</span>
             </p>
           </div>
         </div>

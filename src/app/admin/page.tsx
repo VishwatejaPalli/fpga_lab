@@ -2,6 +2,49 @@
 
 import { useEffect, useState } from "react";
 import Navbar from "@/components/navbar";
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+
+const fpgaUsageData = [
+  { day: 'Mon', sessions: 12 },
+  { day: 'Tue', sessions: 18 },
+  { day: 'Wed', sessions: 24 },
+  { day: 'Thu', sessions: 17 },
+  { day: 'Fri', sessions: 29 },
+  { day: 'Sat', sessions: 14 },
+  { day: 'Sun', sessions: 9 },
+];
+
+const boardUtilizationData = [
+  { board: 'PYNQ-1', runs: 130 },
+  { board: 'PYNQ-2', runs: 85 },
+  { board: 'Basys3', runs: 52 },
+  { board: 'Artix7', runs: 34 },
+];
+
+const userActivityData = [
+  { time: '00:00', active: 2 },
+  { time: '04:00', active: 5 },
+  { time: '08:00', active: 15 },
+  { time: '12:00', active: 45 },
+  { time: '16:00', active: 38 },
+  { time: '20:00', active: 20 },
+];
+
+const sessionDurationData = [
+  { duration: '< 10m', count: 45 },
+  { duration: '10-30m', count: 120 },
+  { duration: '30-60m', count: 85 },
+  { duration: '1-2h', count: 32 },
+  { duration: '> 2h', count: 12 },
+];
+
+const reservationStatsData = [
+  { status: 'Completed', count: 150 },
+  { status: 'Upcoming', count: 42 },
+  { status: 'Cancelled', count: 18 },
+];
+
+const COLORS = ['#10b981', '#3b82f6', '#ef4444'];
 
 interface Board {
   id: string;
@@ -16,6 +59,8 @@ interface Board {
   boardImageUrl: string | null;
   blankBitstreamPath: string | null;
   programmingTool: string | null;
+  sshUsername?: string | null;
+  sshPassword?: string | null;
   status: string;
   capabilities: string[];
   sessionTimeoutMinutes: number;
@@ -31,7 +76,7 @@ interface User {
 }
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<"boards" | "users" | "add-board">("boards");
+  const [tab, setTab] = useState<"analytics" | "boards" | "users" | "add-board">("analytics");
   const [boards, setBoards] = useState<Board[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,7 +87,7 @@ export default function AdminPage() {
   const [createName, setCreateName] = useState("");
   const [createEmail, setCreateEmail] = useState("");
   const [createPassword, setCreatePassword] = useState("");
-  const [createRole, setCreateRole] = useState<"student" | "researcher" | "admin">("student");
+  const [createRole, setCreateRole] = useState<"guest" | "student" | "researcher" | "admin">("student");
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState("");
 
@@ -59,6 +104,8 @@ export default function AdminPage() {
     boardImageUrl: "",
     blankBitstreamPath: "",
     programmingTool: "openFPGALoader",
+    sshUsername: "",
+    sshPassword: "",
     capabilities: [] as string[],
     sessionTimeoutMinutes: 30,
   };
@@ -139,8 +186,10 @@ export default function AdminPage() {
       boardImageUrl: board.boardImageUrl || "",
       blankBitstreamPath: board.blankBitstreamPath || "",
       programmingTool: board.programmingTool || "openFPGALoader",
-      capabilities: board.capabilities,
-      sessionTimeoutMinutes: board.sessionTimeoutMinutes,
+      sshUsername: board.sshUsername || "",
+      sshPassword: board.sshPassword || "",
+      capabilities: board.capabilities || [],
+      sessionTimeoutMinutes: board.sessionTimeoutMinutes || 30,
     });
     setTab("add-board");
   }
@@ -249,6 +298,7 @@ export default function AdminPage() {
   }
 
   const tabs = [
+    { id: "analytics" as const, label: "Analytics" },
     { id: "boards" as const, label: "Boards" },
     { id: "users" as const, label: "Users" },
     { id: "add-board" as const, label: "+ Add Board" },
@@ -300,6 +350,112 @@ export default function AdminPage() {
             }`}
           >
             {message}
+          </div>
+        )}
+
+        {/* Analytics tab */}
+        {tab === "analytics" && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* 1. FPGA Usage Trend */}
+              <div className="card">
+                <h3 className="font-semibold mb-4 text-sm">FPGA Usage Trend</h3>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={fpgaUsageData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                      <XAxis dataKey="day" fontSize={12} />
+                      <YAxis fontSize={12} />
+                      <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                      <Line type="monotone" dataKey="sessions" stroke="#8b5cf6" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* 2. Board Utilization */}
+              <div className="card">
+                <h3 className="font-semibold mb-4 text-sm">Board Utilization</h3>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={boardUtilizationData} layout="vertical" margin={{ left: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" horizontal={true} vertical={false} />
+                      <XAxis type="number" fontSize={12} />
+                      <YAxis dataKey="board" type="category" fontSize={12} width={60} />
+                      <Tooltip cursor={{ fill: '#f3e8ff' }} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                      <Bar dataKey="runs" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* 3. User Activity */}
+              <div className="card">
+                <h3 className="font-semibold mb-4 text-sm">Daily User Activity</h3>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={userActivityData}>
+                      <defs>
+                        <linearGradient id="colorActive" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                      <XAxis dataKey="time" fontSize={12} />
+                      <YAxis fontSize={12} />
+                      <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                      <Area type="monotone" dataKey="active" stroke="#3b82f6" fillOpacity={1} fill="url(#colorActive)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* 4. Session Duration Distribution */}
+              <div className="card">
+                <h3 className="font-semibold mb-4 text-sm">Session Duration Distribution</h3>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={sessionDurationData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                      <XAxis dataKey="duration" fontSize={12} />
+                      <YAxis fontSize={12} />
+                      <Tooltip cursor={{ fill: '#f3e8ff' }} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                      <Bar dataKey="count" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            {/* 5. Reservation Statistics */}
+            <div className="card">
+              <h3 className="font-semibold mb-4 text-sm">Reservation Statistics</h3>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={reservationStatsData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={5}
+                      dataKey="count"
+                      nameKey="status"
+                      label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                      labelLine={false}
+                    >
+                      {reservationStatsData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                    <Legend wrapperStyle={{ fontSize: '12px' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
           </div>
         )}
 
@@ -466,9 +622,10 @@ export default function AdminPage() {
                     <div className="flex items-center gap-3 mt-3">
                       <select
                         value={createRole}
-                        onChange={(e) => setCreateRole(e.target.value as "student" | "researcher" | "admin")}
+                        onChange={(e) => setCreateRole(e.target.value as "guest" | "student" | "researcher" | "admin")}
                         className="input-field w-40"
                       >
+                        <option value="guest">guest</option>
                         <option value="student">student</option>
                         <option value="researcher">researcher</option>
                         <option value="admin">admin</option>
@@ -544,6 +701,7 @@ export default function AdminPage() {
                                 : "bg-green-100 text-green-700"
                             }`}
                           >
+                            <option value="guest">guest</option>
                             <option value="student">student</option>
                             <option value="researcher">researcher</option>
                             <option value="admin">admin</option>
@@ -695,7 +853,40 @@ export default function AdminPage() {
             </div>
 
             <div className="card space-y-4">
-              <h2 className="font-semibold text-lg">Hardware Paths</h2>
+              <h2 className="font-semibold text-lg">Hardware Paths & Credentials</h2>
+
+              {boardForm.connectionType === "network" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-border pb-4 mb-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5">
+                      SSH Username
+                    </label>
+                    <input
+                      type="text"
+                      value={boardForm.sshUsername}
+                      onChange={(e) =>
+                        setBoardForm({ ...boardForm, sshUsername: e.target.value })
+                      }
+                      placeholder="e.g. xilinx"
+                      className="input-field"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5">
+                      SSH Password
+                    </label>
+                    <input
+                      type="password"
+                      value={boardForm.sshPassword}
+                      onChange={(e) =>
+                        setBoardForm({ ...boardForm, sshPassword: e.target.value })
+                      }
+                      placeholder="e.g. xilinx"
+                      className="input-field"
+                    />
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium mb-1.5">
@@ -877,42 +1068,53 @@ export default function AdminPage() {
               </div>
 
               {!detectedDevices && !detecting && (
-                <p className="text-xs text-muted leading-relaxed">
-                  Click <b>SCAN HARDWARE</b> to auto-detect connected FPGA boards, UART ports, and cameras.
-                </p>
+                <div className="bg-primary/5 border border-primary/20 rounded-xl p-6 text-center shadow-inner">
+                  <div className="text-3xl mb-3 opacity-80">🔭</div>
+                  <h4 className="font-semibold text-primary mb-2">Ready to Scan</h4>
+                  <p className="text-xs text-muted leading-relaxed max-w-sm mx-auto">
+                    Click <b>SCAN HARDWARE</b> to auto-detect connected FPGA boards via JTAG, available UART ports, and Webcams.
+                  </p>
+                </div>
               )}
 
               {detecting && (
-                <div className="py-8 text-center">
-                  <div className="animate-spin text-2xl mb-2">🔄</div>
-                  <p className="text-xs text-muted">Probing JTAG and USB ports...</p>
+                <div className="py-12 flex flex-col items-center justify-center relative rounded-xl border border-primary/20 bg-primary/5 overflow-hidden shadow-inner">
+                  <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin mb-4 shadow-[0_0_15px_rgba(59,130,246,0.4)]"></div>
+                  <p className="text-sm font-bold text-primary tracking-wide animate-pulse uppercase">Scanning Hardware</p>
+                  <p className="text-[10px] text-muted mt-2 tracking-wider">Probing JTAG, UART & Video</p>
                 </div>
               )}
 
               {detectedDevices && (
-                <div className="space-y-6">
+                <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
                   {/* JTAG Hardware */}
-                  <div>
-                    <h4 className="text-[10px] font-bold text-muted uppercase tracking-wider mb-2">Detected FPGAs</h4>
+                  <div className="bg-card rounded-xl border border-border p-4 shadow-sm hover:shadow-md transition-shadow">
+                    <h4 className="text-xs font-bold text-foreground flex items-center gap-2 mb-3 pb-2 border-b border-border/50">
+                      <span>🔌</span> Detected FPGAs
+                    </h4>
                     {detectedDevices.hardware.length === 0 ? (
-                      <p className="text-xs text-muted italic">No JTAG devices found.</p>
+                      <div className="text-center py-5 bg-background/50 rounded-lg border border-dashed border-border/50">
+                        <p className="text-xs text-muted">No JTAG devices found.</p>
+                      </div>
                     ) : (
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         {detectedDevices.hardware.map((h, i) => (
-                          <div key={i} className="p-2 rounded bg-background border border-border">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-xs font-mono font-bold text-primary">{h.idcode}</span>
+                          <div key={i} className="group relative p-3 rounded-lg bg-background/50 border border-border hover:border-primary/50 transition-all hover:shadow-[0_0_15px_rgba(59,130,246,0.1)]">
+                            <div className="flex items-start justify-between mb-2">
+                              <div>
+                                <span className="text-sm font-mono font-bold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">{h.idcode}</span>
+                              </div>
                               {h.template && (
                                 <button 
                                   type="button"
                                   onClick={() => applyTemplate(h)}
-                                  className="text-[10px] bg-primary text-white px-1.5 py-0.5 rounded font-bold"
+                                  className="text-[10px] bg-primary hover:bg-primary-hover text-white px-2.5 py-1.5 rounded shadow-md transition-transform active:scale-95 font-bold tracking-wide"
                                 >
                                   USE TEMPLATE
                                 </button>
                               )}
                             </div>
-                            <p className="text-[10px] text-muted truncate">{h.description}</p>
+                            <p className="text-xs text-muted leading-relaxed">{h.description}</p>
                           </div>
                         ))}
                       </div>
@@ -920,50 +1122,60 @@ export default function AdminPage() {
                   </div>
 
                   {/* UART Ports */}
-                  <div>
-                    <h4 className="text-[10px] font-bold text-muted uppercase tracking-wider mb-2">Available UART Ports</h4>
-                    <div className="flex flex-wrap gap-1">
+                  <div className="bg-card rounded-xl border border-border p-4 shadow-sm hover:shadow-md transition-shadow">
+                    <h4 className="text-xs font-bold text-foreground flex items-center gap-2 mb-3 pb-2 border-b border-border/50">
+                      <span>📟</span> Available UART Ports
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
                       {detectedDevices.serialPorts.map((p) => (
                         <button
                           key={p}
                           type="button"
                           onClick={() => setBoardForm({ ...boardForm, serialPort: p })}
-                          className="text-[10px] px-2 py-1 rounded bg-background border border-border hover:border-primary transition-colors"
+                          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-background border border-border hover:border-primary hover:bg-primary/5 hover:text-primary transition-all active:scale-95 shadow-sm"
+                          title="Click to use this port"
                         >
+                          <span className="text-primary/70">🔌</span>
                           {p.replace("/dev/", "")}
                         </button>
                       ))}
                       {detectedDevices.serialPorts.length === 0 && (
-                        <p className="text-xs text-muted italic">No serial ports found.</p>
+                        <p className="text-xs text-muted italic px-2 py-1">No serial ports found.</p>
                       )}
                     </div>
                   </div>
 
                   {/* Cameras */}
-                  <div>
-                    <h4 className="text-[10px] font-bold text-muted uppercase tracking-wider mb-2">Video Devices</h4>
-                    <div className="flex flex-wrap gap-1">
+                  <div className="bg-card rounded-xl border border-border p-4 shadow-sm hover:shadow-md transition-shadow">
+                    <h4 className="text-xs font-bold text-foreground flex items-center gap-2 mb-3 pb-2 border-b border-border/50">
+                      <span>📷</span> Video Devices
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
                       {detectedDevices.cameras.map((c) => (
                         <button
                           key={c}
                           type="button"
                           onClick={() => setBoardForm({ ...boardForm, cameraDevice: c })}
-                          className="text-[10px] px-2 py-1 rounded bg-background border border-border hover:border-primary transition-colors"
+                          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-background border border-border hover:border-accent hover:bg-accent/5 hover:text-accent transition-all active:scale-95 shadow-sm"
+                          title="Click to use this camera"
                         >
+                          <span className="text-accent/70">👁️</span>
                           {c.replace("/dev/", "")}
                         </button>
                       ))}
                       {detectedDevices.cameras.length === 0 && (
-                        <p className="text-xs text-muted italic">No cameras found.</p>
+                        <p className="text-xs text-muted italic px-2 py-1">No cameras found.</p>
                       )}
                     </div>
                   </div>
 
                   {/* Raw detection output */}
                   {detectedDevices.rawOutput && (
-                    <div>
-                      <h4 className="text-[10px] font-bold text-muted uppercase tracking-wider mb-2">Detector Output</h4>
-                      <pre className="text-[10px] bg-background border border-border rounded p-2 max-h-40 overflow-auto whitespace-pre-wrap">
+                    <div className="bg-card rounded-xl border border-border p-4 shadow-sm hover:shadow-md transition-shadow">
+                      <h4 className="text-xs font-bold text-foreground flex items-center gap-2 mb-3 pb-2 border-b border-border/50">
+                        <span>📝</span> Detector Log
+                      </h4>
+                      <pre className="text-[10px] font-mono bg-background border border-border/50 rounded-lg p-3 max-h-48 overflow-auto whitespace-pre-wrap text-muted">
                         {detectedDevices.rawOutput}
                       </pre>
                     </div>

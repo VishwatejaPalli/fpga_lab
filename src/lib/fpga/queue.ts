@@ -12,6 +12,7 @@ import { EventEmitter } from "events";
  */
 class JobQueue extends EventEmitter {
   private boardLocks = new Map<string, boolean>();
+  private activeProgrammers = new Map<string, FPGAProgrammer>();
   private interval: ReturnType<typeof setInterval> | null = null;
 
   /**
@@ -56,7 +57,18 @@ class JobQueue extends EventEmitter {
         .get();
 
       if (!board || board.status === "offline") continue;
-      if (board.status === "busy") continue;
+
+      if (board.status === "programming" || board.status === "allocated" || this.boardLocks.get(job.boardId)) {
+        // PREEMPTION: Kill the currently running programmer for this board
+        console.log(`[Queue] Preempting board ${job.boardId} for new job ${job.id}`);
+        const activeProg = this.activeProgrammers.get(job.boardId);
+        if (activeProg) {
+          activeProg.kill();
+          this.activeProgrammers.delete(job.boardId);
+        }
+        // Force unlock so the new job can proceed
+        this.boardLocks.set(job.boardId, false);
+      }
 
       // Lock board and start programming
       this.boardLocks.set(job.boardId, true);
@@ -85,12 +97,13 @@ class JobQueue extends EventEmitter {
 
       // Update board status
       db.update(boards)
-        .set({ status: "busy" })
+        .set({ status: "programming" })
         .where(eq(boards.id, board.id))
         .run();
 
       // Create programmer instance
       const programmer = new FPGAProgrammer();
+      this.activeProgrammers.set(board.id, programmer);
 
       // Forward log events
       programmer.on("log", (text: string) => {
@@ -103,6 +116,7 @@ class JobQueue extends EventEmitter {
         bitstreamPath: job.bitstreamPath,
         programmingTool: board.programmingTool || "openFPGALoader",
         devicePath: board.devicePath,
+        ipAddress: board.ipAddress,
         timeout: 120000,
       });
 
@@ -127,7 +141,7 @@ class JobQueue extends EventEmitter {
 
         // Update board with session
         db.update(boards)
-          .set({ status: "busy", currentSessionId: sessionId })
+          .set({ status: "allocated", currentSessionId: sessionId })
           .where(eq(boards.id, board.id))
           .run();
 
@@ -187,6 +201,7 @@ class JobQueue extends EventEmitter {
         .run();
     } finally {
       this.boardLocks.set(job.boardId, false);
+      this.activeProgrammers.delete(board.id);
     }
   }
 }

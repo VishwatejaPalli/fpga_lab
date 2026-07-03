@@ -18,6 +18,8 @@ const boardSchema = z.object({
   boardImageUrl: z.string().optional(),
   blankBitstreamPath: z.string().optional(),
   programmingTool: z.string().default("openFPGALoader"),
+  sshUsername: z.string().optional(),
+  sshPassword: z.string().optional(),
   capabilities: z.array(z.string()).default([]),
   sessionTimeoutMinutes: z.number().min(5).max(480).default(30),
 });
@@ -71,6 +73,8 @@ export async function POST(req: NextRequest) {
         boardImageUrl: data.boardImageUrl || null,
         blankBitstreamPath: data.blankBitstreamPath || null,
         programmingTool: data.programmingTool,
+        sshUsername: data.sshUsername || null,
+        sshPassword: data.sshPassword || null,
         capabilities: JSON.stringify(data.capabilities),
         sessionTimeoutMinutes: data.sessionTimeoutMinutes,
         status: "free",
@@ -123,6 +127,8 @@ export async function PATCH(req: NextRequest) {
         boardImageUrl: data.boardImageUrl || null,
         blankBitstreamPath: data.blankBitstreamPath || null,
         programmingTool: data.programmingTool,
+        sshUsername: data.sshUsername || null,
+        sshPassword: data.sshPassword || null,
         capabilities: JSON.stringify(data.capabilities),
         sessionTimeoutMinutes: data.sessionTimeoutMinutes,
       })

@@ -3,8 +3,45 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/navbar";
+import { AreaChart, Area, ScatterChart, Scatter, ZAxis, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 type Tab = "analytics" | "notebooks" | "reservations" | "batch" | "api-keys" | "export";
+
+const powerConsumptionData = [
+  { experiment: 'E1', power: 420 },
+  { experiment: 'E2', power: 380 },
+  { experiment: 'E3', power: 510 },
+  { experiment: 'E4', power: 450 },
+  { experiment: 'E5', power: 390 },
+];
+
+const throughputLatencyData = [
+  { id: 'Test1', throughput: 1.2, latency: 15 },
+  { id: 'Test2', throughput: 2.1, latency: 22 },
+  { id: 'Test3', throughput: 1.8, latency: 18 },
+  { id: 'Test4', throughput: 3.5, latency: 45 },
+  { id: 'Test5', throughput: 2.8, latency: 32 },
+];
+
+const experimentOutcomesData = [
+  { status: 'Success', count: 82 },
+  { status: 'Failed', count: 12 },
+  { status: 'Timeout', count: 6 },
+];
+
+const executionTimeData = [
+  { experiment: 'E1', seconds: 22 },
+  { experiment: 'E2', seconds: 18 },
+  { experiment: 'E3', seconds: 34 },
+  { experiment: 'E4', seconds: 27 },
+];
+
+const resourceUtilizationData = [
+  { design: 'FIR', LUT: 1200, FF: 800, BRAM: 4, DSP: 12 },
+  { design: 'CNN', LUT: 5400, FF: 3100, BRAM: 18, DSP: 64 },
+];
+
+const COLORS = ['#10b981', '#ef4444', '#f59e0b'];
 
 interface Analytics {
   summary: {
@@ -55,6 +92,8 @@ interface Board {
   id: string;
   name: string;
   status: string;
+  boardType?: string;
+  fpgaFamily?: string;
 }
 
 interface AuthUser {
@@ -92,6 +131,40 @@ export default function ResearcherPage() {
   const [newKeyDays, setNewKeyDays] = useState(90);
   const [revealedKey, setRevealedKey] = useState("");
 
+  // Batch JTAG Programming states
+  interface BatchSubJob {
+    id: string;
+    board_id: string;
+    status: "queued" | "programming" | "success" | "failed" | "cancelled";
+    created_at: string;
+    completed_at: string | null;
+    board_name: string;
+  }
+
+  interface BatchJob {
+    id: string;
+    name: string;
+    status: "pending" | "running" | "completed" | "failed";
+    total_boards: number;
+    completed_boards: number;
+    failed_boards: number;
+    created_at: string;
+    completed_at: string | null;
+    jobs?: BatchSubJob[];
+  }
+
+  const [batches, setBatches] = useState<BatchJob[]>([]);
+  const [selectedBoards, setSelectedBoards] = useState<string[]>([]);
+  const [batchBitstreamName, setBatchBitstreamName] = useState("blinky.bit");
+  const [batchBitstreamPath, setBatchBitstreamPath] = useState("/uploads/blinky.bit");
+  const [batchName, setBatchName] = useState("");
+  const [expandedBatch, setExpandedBatch] = useState<string | null>(null);
+
+  // Real-time JTAG log streaming states
+  const [activeLogJobId, setActiveLogJobId] = useState<string | null>(null);
+  const [activeLogBoardName, setActiveLogBoardName] = useState("");
+  const [activeJobLogs, setActiveJobLogs] = useState<string>("");
+
   // Flash message
   const [msg, setMsg] = useState({ text: "", ok: true });
 
@@ -109,12 +182,58 @@ export default function ResearcherPage() {
       .catch(() => router.push("/auth/login"));
   }, [router]);
 
+  // WebSocket JTAG logs hook
+  useEffect(() => {
+    if (!activeLogJobId) return;
+
+    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsHost = window.location.host;
+    const ws = new WebSocket(`${wsProtocol}//${wsHost}/ws/logs/${activeLogJobId}`);
+
+    setActiveJobLogs(`[WebSocket] Connecting to log stream for ${activeLogBoardName}...\n`);
+
+    ws.onopen = () => {
+      setActiveJobLogs((prev) => prev + `[WebSocket] Connected. Waiting for JTAG logs...\n`);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "job-log" && msg.data) {
+          setActiveJobLogs((prev) => prev + msg.data);
+        } else if (msg.type === "job-complete") {
+          setActiveJobLogs((prev) => prev + `\n[System] Programming completed: ${msg.success ? "SUCCESS" : "FAILED"}\n`);
+        }
+      } catch (err) {
+        setActiveJobLogs((prev) => prev + event.data);
+      }
+    };
+
+    ws.onerror = () => {
+      setActiveJobLogs((prev) => prev + `[WebSocket] Connection error.\n`);
+    };
+
+    ws.onclose = () => {
+      setActiveJobLogs((prev) => prev + `[WebSocket] Disconnected.\n`);
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, [activeLogJobId, activeLogBoardName]);
+
   useEffect(() => {
     if (!user) return;
     if (tab === "analytics") fetchAnalytics();
     if (tab === "notebooks") fetchNotes();
     if (tab === "reservations") { fetchReservations(); fetchBoards(); }
     if (tab === "api-keys") fetchApiKeys();
+    if (tab === "batch") {
+      fetchBatchJobs();
+      fetchBoards();
+      const interval = setInterval(fetchBatchJobs, 5000);
+      return () => clearInterval(interval);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, user, days]);
 
@@ -153,6 +272,55 @@ export default function ResearcherPage() {
       const r = await fetch("/api/researcher/api-keys");
       if (r.ok) { const j = await r.json(); setApiKeys(j.keys); }
     } catch { /* */ }
+  }
+
+  // ── JTAG Batch Programming ────────────────────────────────────────────
+  async function fetchBatchJobs() {
+    try {
+      const r = await fetch("/api/researcher/batch");
+      if (r.ok) {
+        const j = await r.json();
+        setBatches(j.batches || []);
+      }
+    } catch (err) {
+      console.error("Error fetching batch jobs:", err);
+    }
+  }
+
+  async function deployBatch() {
+    if (selectedBoards.length === 0) {
+      flash("Please select at least one board", false);
+      return;
+    }
+    if (!batchBitstreamName.trim() || !batchBitstreamPath.trim()) {
+      flash("Bitstream path and name are required", false);
+      return;
+    }
+    const name = batchName.trim() || `Batch: ${batchBitstreamName}`;
+    try {
+      const r = await fetch("/api/researcher/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          boardIds: selectedBoards,
+          bitstreamPath: batchBitstreamPath.trim(),
+          bitstreamName: batchBitstreamName.trim(),
+        }),
+      });
+      const data = await r.json();
+      if (r.ok) {
+        flash("JTAG Batch programming successfully queued", true);
+        setSelectedBoards([]);
+        setBatchName("");
+        fetchBatchJobs();
+      } else {
+        flash(data.error || "Failed to start batch deploy", false);
+      }
+    } catch (err) {
+      console.error("Error deploying batch:", err);
+      flash("Error starting batch JTAG program", false);
+    }
   }
 
   // ── Note CRUD ─────────────────────────────────────────────────────────
@@ -301,130 +469,118 @@ export default function ResearcherPage() {
         {/* ═══════════════ ANALYTICS ═══════════════ */}
         {tab === "analytics" && (
           <div className="space-y-6">
-            {/* Period selector */}
-            <div className="flex gap-2">
-              {[7, 30, 90].map((d) => (
-                <button
-                  key={d}
-                  onClick={() => setDays(d)}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition touch-manipulation ${
-                    days === d ? "bg-purple-600 text-white" : "bg-white border text-gray-600"
-                  }`}
-                >
-                  {d} days
-                </button>
-              ))}
+            {/* Header Cards */}
+            <div className="grid grid-cols-3 gap-4">
+              <StatCard label="Active Boards" value={4} />
+              <StatCard label="Experiments" value={132} />
+              <StatCard label="Users" value={18} />
             </div>
 
-            {analytics ? (
-              <>
-                {/* Summary cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <StatCard label="Total Jobs" value={analytics.summary.totalJobs} />
-                  <StatCard
-                    label="Success Rate"
-                    value={`${analytics.summary.successRate}%`}
-                    color={analytics.summary.successRate >= 80 ? "text-green-600" : "text-yellow-600"}
-                  />
-                  <StatCard label="Boards Used" value={analytics.summary.boardsUsed} />
-                  <StatCard label="Lab Hours" value={analytics.summary.totalLabHours} />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* 1. Power Consumption Analysis */}
+              <div className="card">
+                <h3 className="font-semibold mb-4 text-sm">Power Consumption Analysis</h3>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={powerConsumptionData}>
+                      <defs>
+                        <linearGradient id="colorPower" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                      <XAxis dataKey="experiment" fontSize={12} />
+                      <YAxis fontSize={12} label={{ value: 'mW', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: '12px', fill: '#666' } }} />
+                      <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                      <Area type="monotone" dataKey="power" stroke="#f59e0b" fillOpacity={1} fill="url(#colorPower)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
                 </div>
-
-                {/* Jobs per day bar chart */}
-                <div className="card">
-                  <h3 className="font-semibold mb-4 text-sm">Jobs Per Day</h3>
-                  {analytics.jobsPerDay.length > 0 ? (
-                    <div className="flex items-end gap-1 h-32 overflow-x-auto pb-1">
-                      {analytics.jobsPerDay.map((d, i) => {
-                        const max = Math.max(...analytics.jobsPerDay.map((x) => x.count), 1);
-                        const h = (d.count / max) * 100;
-                        return (
-                          <div key={i} className="flex flex-col items-center min-w-[20px] group relative">
-                            <div
-                              className="w-4 sm:w-5 bg-purple-200 rounded-t transition-all"
-                              style={{ height: `${h}%`, minHeight: d.count > 0 ? "4px" : "0" }}
-                            />
-                            <div className="absolute -top-7 bg-gray-900 text-white text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10">
-                              {d.day}: {d.count} jobs ({d.success}✓ {d.failed}✗)
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-muted text-sm">No data for this period</p>
-                  )}
-                </div>
-
-                {/* Board usage */}
-                <div className="card">
-                  <h3 className="font-semibold mb-4 text-sm">Board Usage</h3>
-                  <div className="space-y-3">
-                    {analytics.boardUsage.map((b, i) => {
-                      const max = Math.max(...analytics.boardUsage.map((x) => x.job_count), 1);
-                      const pct = Math.round((b.success_count / Math.max(b.job_count, 1)) * 100);
-                      return (
-                        <div key={i}>
-                          <div className="flex justify-between text-sm mb-1">
-                            <span className="font-medium truncate">{b.board_name}</span>
-                            <span className="text-muted shrink-0 ml-2">{b.job_count} jobs · {pct}% ok</span>
-                          </div>
-                          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                            <div className="h-full bg-purple-500 rounded-full" style={{ width: `${(b.job_count / max) * 100}%` }} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {analytics.boardUsage.length === 0 && <p className="text-muted text-sm">No board data</p>}
-                  </div>
-                </div>
-
-                {/* Peak hours */}
-                <div className="card">
-                  <h3 className="font-semibold mb-4 text-sm">Peak Usage Hours</h3>
-                  <div className="flex items-end gap-0.5 h-24">
-                    {Array.from({ length: 24 }, (_, h) => {
-                      const entry = analytics.peakHours.find((p) => p.hour === h);
-                      const count = entry?.count || 0;
-                      const max = Math.max(...analytics.peakHours.map((p) => p.count), 1);
-                      return (
-                        <div key={h} className="flex-1 flex flex-col items-center group relative">
-                          <div
-                            className="w-full bg-purple-200 rounded-t"
-                            style={{ height: `${(count / max) * 100}%`, minHeight: count > 0 ? "4px" : "0" }}
-                          />
-                          {h % 6 === 0 && <span className="text-[9px] text-muted mt-1">{h}h</span>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Weekly success rate */}
-                <div className="card">
-                  <h3 className="font-semibold mb-4 text-sm">Weekly Success Rate</h3>
-                  <div className="space-y-2">
-                    {analytics.weeklyRate.map((w, i) => (
-                      <div key={i} className="flex items-center gap-3 text-sm">
-                        <span className="w-20 text-muted text-xs shrink-0">{w.week}</span>
-                        <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${w.rate >= 80 ? "bg-green-400" : w.rate >= 50 ? "bg-yellow-400" : "bg-red-400"}`}
-                            style={{ width: `${w.rate}%` }}
-                          />
-                        </div>
-                        <span className="w-12 text-right text-xs font-medium">{w.rate}%</span>
-                      </div>
-                    ))}
-                    {analytics.weeklyRate.length === 0 && <p className="text-muted text-sm">No data</p>}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="flex items-center justify-center h-40">
-                <div className="animate-pulse text-muted">Loading analytics...</div>
               </div>
-            )}
+
+              {/* 2. Throughput vs Latency */}
+              <div className="card">
+                <h3 className="font-semibold mb-4 text-sm">Throughput vs Latency</h3>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                      <XAxis type="number" dataKey="throughput" name="Throughput" unit=" GB/s" fontSize={12} />
+                      <YAxis type="number" dataKey="latency" name="Latency" unit=" ms" fontSize={12} />
+                      <ZAxis type="category" dataKey="id" name="Test ID" />
+                      <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                      <Scatter name="Tests" data={throughputLatencyData} fill="#3b82f6" />
+                    </ScatterChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* 3. Experiment Outcomes */}
+              <div className="card">
+                <h3 className="font-semibold mb-4 text-sm">Job Status Distribution</h3>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={experimentOutcomesData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={5}
+                        dataKey="count"
+                        nameKey="status"
+                        label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                        labelLine={false}
+                      >
+                        {experimentOutcomesData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                      <Legend wrapperStyle={{ fontSize: '12px' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* 4. Execution Time Analysis */}
+              <div className="card">
+                <h3 className="font-semibold mb-4 text-sm">Experiment Runtime Analysis</h3>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={executionTimeData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                      <XAxis dataKey="experiment" fontSize={12} />
+                      <YAxis fontSize={12} label={{ value: 'Seconds', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: '12px', fill: '#666' } }} />
+                      <Tooltip cursor={{ fill: '#f3e8ff' }} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                      <Bar dataKey="seconds" fill="#a78bfa" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            {/* 5. Resource Utilization */}
+            <div className="card">
+              <h3 className="font-semibold mb-4 text-sm">Resource Usage Analytics</h3>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={resourceUtilizationData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                    <XAxis dataKey="design" fontSize={12} />
+                    <YAxis fontSize={12} />
+                    <Tooltip cursor={{ fill: '#f3e8ff' }} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                    <Legend wrapperStyle={{ fontSize: '12px' }} />
+                    <Bar dataKey="LUT" fill="#8b5cf6" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="FF" fill="#c4b5fd" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="BRAM" fill="#f43f5e" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="DSP" fill="#10b981" radius={[2, 2, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
           </div>
         )}
 
@@ -660,66 +816,277 @@ export default function ResearcherPage() {
 
         {/* ═══════════════ BATCH PROGRAMMING ═══════════════ */}
         {tab === "batch" && (
-          <div className="space-y-4">
-            <div className="card">
-              <h3 className="font-semibold mb-2">Batch Programming</h3>
-              <p className="text-sm text-muted mb-4">
-                Program the same bitstream to multiple boards simultaneously.
-                Upload your bitstream on the{" "}
-                <a href="/program" className="text-primary underline hover:no-underline">
-                  Program page
-                </a>
-                , then use the batch API to deploy to up to 10 boards at once.
-              </p>
-
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h4 className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">API Usage</h4>
-                <pre className="text-xs font-mono text-gray-700 overflow-x-auto whitespace-pre-wrap leading-relaxed">
-{`POST /api/researcher/batch
-Content-Type: application/json
-Authorization: Bearer fpga_xxxx...
-
-{
-  "name": "Deploy counter v2",
-  "boardIds": ["board-id-1", "board-id-2"],
-  "bitstreamPath": "/uploads/counter.bit",
-  "bitstreamName": "counter.bit"
-}`}
-                </pre>
+          <div className="space-y-6">
+            {/* Interactive Deploy Panel */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Form Config */}
+              <div className="card space-y-4">
+                <h3 className="text-base font-bold text-foreground mb-1">Batch JTAG Configuration</h3>
+                <div>
+                  <label className="text-xs font-semibold text-muted mb-1 block">Batch Label</label>
+                  <input
+                    value={batchName}
+                    onChange={(e) => setBatchName(e.target.value)}
+                    placeholder="e.g. Basys3 Bench Deployment"
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted mb-1 block">Bitstream File Name</label>
+                  <input
+                    value={batchBitstreamName}
+                    onChange={(e) => setBatchBitstreamName(e.target.value)}
+                    placeholder="e.g. blinky.bit"
+                    className="input-field font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted mb-1 block">Server Bitstream File Path</label>
+                  <input
+                    value={batchBitstreamPath}
+                    onChange={(e) => setBatchBitstreamPath(e.target.value)}
+                    placeholder="e.g. /uploads/blinky.bit"
+                    className="input-field font-mono"
+                  />
+                  <p className="text-[10px] text-muted mt-1">
+                    Upload your custom bitstream file on the{" "}
+                    <a href="/program" className="text-purple-600 underline hover:no-underline font-medium">
+                      Program page
+                    </a>
+                    , then copy its path here.
+                  </p>
+                </div>
+                <button
+                  onClick={deployBatch}
+                  className="btn-primary w-full py-2.5 transition active:scale-98"
+                >
+                  🚀 Deploy Batch to {selectedBoards.length} Boards
+                </button>
               </div>
 
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="bg-purple-50 rounded-lg p-3 text-center">
-                  <div className="text-2xl mb-1">10</div>
-                  <div className="text-xs text-muted">Max boards per batch</div>
+              {/* Target Boards Selector */}
+              <div className="card flex flex-col">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-base font-bold text-foreground">Select Target Boards</h3>
+                  <button
+                    onClick={() => {
+                      const allSelectable = boards.filter((b) => b.status !== "offline").map((b) => b.id);
+                      if (selectedBoards.length === allSelectable.length) {
+                        setSelectedBoards([]);
+                      } else {
+                        setSelectedBoards(allSelectable);
+                      }
+                    }}
+                    className="text-xs text-purple-600 font-semibold hover:underline"
+                  >
+                    {selectedBoards.length === boards.filter((b) => b.status !== "offline").length ? "Deselect All" : "Select All"}
+                  </button>
                 </div>
-                <div className="bg-purple-50 rounded-lg p-3 text-center">
-                  <div className="text-2xl mb-1">⚡</div>
-                  <div className="text-xs text-muted">High priority queue</div>
-                </div>
-                <div className="bg-purple-50 rounded-lg p-3 text-center">
-                  <div className="text-2xl mb-1">3</div>
-                  <div className="text-xs text-muted">Concurrent sessions</div>
-                </div>
+
+                {boards.length === 0 ? (
+                  <p className="text-muted text-xs my-auto text-center">No boards registered.</p>
+                ) : (
+                  <div className="space-y-2 overflow-y-auto max-h-[280px] pr-1">
+                    {boards.map((b) => {
+                      const isSelected = selectedBoards.includes(b.id);
+                      const isOffline = b.status === "offline";
+                      const isBusy = b.status === "busy";
+
+                      return (
+                        <label
+                          key={b.id}
+                          className={`flex items-center gap-3 p-3 rounded-lg border text-sm transition cursor-pointer select-none ${
+                            isOffline
+                              ? "bg-gray-50 border-gray-150 opacity-60 cursor-not-allowed"
+                              : isSelected
+                              ? "bg-purple-50/60 border-purple-300 ring-1 ring-purple-100"
+                              : "bg-white hover:border-gray-300 border-gray-200"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            disabled={isOffline}
+                            checked={isSelected}
+                            onChange={() => {
+                              if (isSelected) {
+                                setSelectedBoards((prev) => prev.filter((id) => id !== b.id));
+                              } else {
+                                setSelectedBoards((prev) => [...prev, b.id]);
+                              }
+                            }}
+                            className="rounded text-purple-600 focus:ring-purple-400 w-4 h-4"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold truncate">{b.name}</span>
+                              <span className="text-[10px] text-muted font-mono">{b.boardType}</span>
+                            </div>
+                            <div className="text-[10px] text-muted mt-0.5 truncate">
+                              Family: {b.fpgaFamily}
+                            </div>
+                          </div>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                            isOffline ? "bg-gray-150 text-gray-500" : isBusy ? "bg-amber-100 text-amber-700 animate-pulse" : "bg-green-100 text-green-700"
+                          }`}>
+                            {b.status}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="card">
-              <h3 className="font-semibold mb-2 text-sm">Session Limits</h3>
-              <div className="text-sm text-muted space-y-2">
-                <div className="flex justify-between">
-                  <span>Session timeout</span>
-                  <span className="font-medium text-foreground">120 minutes</span>
+            {/* JTAG Live Log Stream Panel */}
+            {activeLogJobId && (
+              <div className="card border-purple-300 bg-gray-950 text-gray-100 p-4 font-mono text-xs flex flex-col relative shadow-lg">
+                <div className="flex items-center justify-between border-b border-gray-800 pb-2 mb-3">
+                  <span className="text-gray-400 flex items-center gap-1.5 font-bold">
+                    <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
+                    Live Log Stream: {activeLogBoardName}
+                  </span>
+                  <button
+                    onClick={() => setActiveLogJobId(null)}
+                    className="text-gray-400 hover:text-white transition font-bold"
+                  >
+                    ✕ Close Feed
+                  </button>
                 </div>
-                <div className="flex justify-between">
-                  <span>Concurrent sessions</span>
-                  <span className="font-medium text-foreground">3</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Job priority</span>
-                  <span className="font-medium text-purple-600">High</span>
+                <div className="bg-gray-900 border border-gray-800 rounded p-3 h-64 overflow-y-auto whitespace-pre-wrap leading-relaxed select-text font-mono text-[11px] scrollbar-thin scrollbar-thumb-gray-800">
+                  {activeJobLogs}
                 </div>
               </div>
+            )}
+
+            {/* Batch History List */}
+            <div className="space-y-3">
+              <h3 className="text-base font-bold text-foreground">JTAG Batch Jobs History</h3>
+
+              {batches.length === 0 ? (
+                <div className="card text-center py-10">
+                  <div className="text-3xl mb-2">⚡</div>
+                  <p className="font-semibold text-sm">No batch deployments yet</p>
+                  <p className="text-xs text-muted mt-0.5">Use the configuration form above to trigger your first JTAG batch</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {batches.map((batch) => {
+                    const isExpanded = expandedBatch === batch.id;
+                    const total = batch.total_boards;
+                    const done = batch.completed_boards + batch.failed_boards;
+                    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+                    const isRunning = batch.status === "running";
+
+                    return (
+                      <div
+                        key={batch.id}
+                        className={`card transition border overflow-hidden p-0 ${
+                          isRunning ? "border-purple-300 shadow-sm" : ""
+                        }`}
+                      >
+                        {/* Header Details */}
+                        <div
+                          onClick={() => setExpandedBatch(isExpanded ? null : batch.id)}
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 cursor-pointer select-none bg-gray-50/50 hover:bg-gray-50 transition"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-bold text-sm text-foreground">{batch.name}</span>
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                                batch.status === "completed"
+                                  ? "bg-green-100 text-green-700"
+                                  : batch.status === "failed"
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-purple-100 text-purple-700 animate-pulse"
+                              }`}>
+                                {batch.status}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-muted space-x-3">
+                              <span>📅 Created: {new Date(batch.created_at).toLocaleString()}</span>
+                              <span>Target: {total} boards</span>
+                              {batch.completed_at && <span>Done: {new Date(batch.completed_at).toLocaleString()}</span>}
+                            </div>
+                          </div>
+
+                          <div className="sm:w-48 shrink-0 flex items-center gap-3">
+                            <div className="flex-1">
+                              <div className="flex justify-between text-[10px] font-semibold text-muted mb-1">
+                                <span>Progress</span>
+                                <span>{percent}% ({done}/{total})</span>
+                              </div>
+                              <div className="w-full bg-gray-150 rounded-full h-1.5 overflow-hidden">
+                                <div
+                                  className={`h-1.5 rounded-full transition-all duration-500 ${
+                                    batch.status === "completed"
+                                      ? "bg-green-500"
+                                      : batch.status === "failed"
+                                      ? "bg-red-500"
+                                      : "bg-purple-600"
+                                  }`}
+                                  style={{ width: `${percent}%` }}
+                                />
+                              </div>
+                            </div>
+                            <span className="text-xs text-muted font-semibold transition-transform">
+                              {isExpanded ? "▲" : "▼"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Collapsible Details list of sub-jobs */}
+                        {isExpanded && (
+                          <div className="border-t border-border bg-white divide-y divide-gray-100">
+                            {batch.jobs && batch.jobs.length > 0 ? (
+                              batch.jobs.map((job) => (
+                                <div key={job.id} className="flex items-center justify-between p-3.5 pl-6 text-xs transition hover:bg-gray-50/50">
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-semibold text-gray-700">{job.board_name}</span>
+                                      <span className="text-[9px] font-mono text-muted">{job.board_id}</span>
+                                    </div>
+                                    {job.completed_at && (
+                                      <div className="text-[9px] text-muted mt-0.5">
+                                        Completed: {new Date(job.completed_at).toLocaleString()}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-3">
+                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                                      job.status === "success"
+                                        ? "bg-green-50 text-green-700"
+                                        : job.status === "failed" || job.status === "cancelled"
+                                        ? "bg-red-50 text-red-700"
+                                        : "bg-yellow-50 text-yellow-750 animate-pulse"
+                                    }`}>
+                                      {job.status}
+                                    </span>
+                                    {(job.status === "programming" || job.status === "queued" || job.status === "success" || job.status === "failed") && (
+                                      <button
+                                        onClick={() => {
+                                          setActiveLogJobId(job.id);
+                                          setActiveLogBoardName(job.board_name);
+                                        }}
+                                        className="text-[10px] text-purple-600 hover:text-purple-800 font-semibold border border-purple-200 hover:bg-purple-50 px-2 py-1 rounded transition select-none"
+                                      >
+                                        📡 Live Logs
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="p-4 text-center text-xs text-muted">No sub-jobs generated for this batch.</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}

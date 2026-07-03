@@ -47,7 +47,7 @@ function getDemoLogSequence(bitstreamName: string, boardName: string): DemoLogLi
   }
 
   const designName = bitstreamName.replace(/\.(bit|bin|svf|rbf|sof)$/i, "");
-  const fileSize = (Math.random() * 3 + 1).toFixed(1);
+  const fileSize = "2.5";
 
   return [
     { text: `$ openFPGALoader --board auto -f ${bitstreamName}\n`, delay: 0 },
@@ -71,10 +71,10 @@ function getDemoLogSequence(bitstreamName: string, boardName: string): DemoLogLi
     { text: `  Design name:   ${designName}\n`, delay: 150 },
     { text: `  Part name:     ${fpgaPart.split("-")[0]}\n`, delay: 100 },
     { text: `  Date:          ${new Date().toISOString().split("T")[0]}\n`, delay: 100 },
-    { text: `  File size:     ${fileSize} MB (${Math.floor(parseFloat(fileSize) * 1024 * 1024)} bytes)\n`, delay: 100 },
-    { text: `  Bitstream CRC: 0x${Math.floor(Math.random() * 0xFFFF).toString(16).padStart(4, "0").toUpperCase()}\n`, delay: 200 },
+    { text: `  File size:     ${fileSize} MB (2621440 bytes)\n`, delay: 100 },
+    { text: `  Bitstream CRC: 0x8A4F\n`, delay: 200 },
     { text: `\n`, delay: 100 },
-    { text: `DNA: 0x${Array.from({length: 16}, () => Math.floor(Math.random() * 16).toString(16)).join("")}\n`, delay: 300 },
+    { text: `DNA: 0x4002000001234567\n`, delay: 300 },
     { text: `\n`, delay: 200 },
     { text: `Erasing device...`, delay: 800 },
     { text: ` done.\n`, delay: 1200 },
@@ -97,7 +97,7 @@ function getDemoLogSequence(bitstreamName: string, boardName: string): DemoLogLi
     { text: `  Verification: PASSED ✓\n`, delay: 300 },
     { text: `\n`, delay: 100 },
     { text: `FPGA configured successfully.\n`, delay: 200 },
-    { text: `Total time: ${(Math.random() * 2 + 3).toFixed(1)}s\n`, delay: 100 },
+    { text: `Total time: 4.5s\n`, delay: 100 },
     { text: `\n`, delay: 100 },
     { text: `Starting hardware session...\n`, delay: 400 },
     { text: `UART: /dev/ttyUSB1 @ 115200 baud\n`, delay: 300 },

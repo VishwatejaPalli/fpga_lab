@@ -7,7 +7,7 @@ interface TerminalProps {
   isFullscreen?: boolean;
 }
 
-export default function Terminal({ boardId, isFullscreen }: TerminalProps) {
+export default function SshTerminal({ boardId, isFullscreen }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<any>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -43,88 +43,59 @@ export default function Terminal({ boardId, isFullscreen }: TerminalProps) {
       fitAddon.fit();
       terminalRef.current = term;
 
-      term.write("Connecting to board UART...\r\n");
+      term.write("Connecting to board SSH...\r\n");
 
       // Establish WebSocket connection
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsUrl = `${protocol}//${window.location.host}/ws/uart/${boardId}`;
+      const wsUrl = `${protocol}//${window.location.host}/ws/ssh/${boardId}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
-        term.write("\r\x1b[32m[Connected to UART]\x1b[0m\r\n");
+        // We notify the backend about the terminal size so SSH PTY can size properly
+        ws.send(JSON.stringify({ 
+          type: "ssh-resize", 
+          cols: term.cols, 
+          rows: term.rows 
+        }));
       };
 
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
-          if (msg.type === "uart-data") {
-            // Replace \n with \r\n for xterm line wrapping
-            term.write(msg.data.replace(/\r?\n/g, "\r\n"));
+          if (msg.type === "ssh-data") {
+            // SSH PTY stream sends exact raw PTY output (carriage returns included usually)
+            term.write(msg.data);
           }
         } catch {
-          term.write(event.data.replace(/\r?\n/g, "\r\n"));
+          term.write(event.data);
         }
       };
 
       ws.onclose = () => {
-        term.write("\r\n\x1b[33m[Disconnected — Board UART not reachable]\x1b[0m\r\n");
-        term.write("\x1b[90mRetrying connection every 5 seconds...\x1b[0m\r\n");
+        term.write("\r\n\x1b[33m[Hardware not connected or SSH unavailable]\x1b[0m\r\n\r\n");
 
-        // Auto-reconnect every 5 seconds
-        const reconnect = () => {
-          if (isDestroyed) return;
-          term.write("\r\x1b[90m[Reconnecting...]\x1b[0m\r\n");
-          const retryWs = new WebSocket(wsUrl);
+        const DEMO_SSH_LINES = [
+          "Connection refused or timed out.",
+          "Please verify that this board supports SSH and is properly configured",
+          "in the admin panel (network connection type, IP address).",
+        ];
 
-          retryWs.onopen = () => {
-            term.write("\r\x1b[32m[Reconnected to UART]\x1b[0m\r\n");
-            wsRef.current = retryWs;
-
-            retryWs.onmessage = (event) => {
-              try {
-                const msg = JSON.parse(event.data);
-                if (msg.type === "uart-data") {
-                  term.write(msg.data.replace(/\r?\n/g, "\r\n"));
-                }
-              } catch {
-                term.write(event.data.replace(/\r?\n/g, "\r\n"));
-              }
-            };
-
-            retryWs.onclose = () => {
-              term.write("\r\n\x1b[33m[Connection lost]\x1b[0m\r\n");
-              if (!isDestroyed) {
-                demoInterval = setTimeout(reconnect, 5000) as unknown as ReturnType<typeof setInterval>;
-              }
-            };
-          };
-
-          retryWs.onerror = () => {
-            retryWs.close();
-            if (!isDestroyed) {
-              demoInterval = setTimeout(reconnect, 5000) as unknown as ReturnType<typeof setInterval>;
-            }
-          };
-        };
-
-        demoInterval = setTimeout(reconnect, 5000) as unknown as ReturnType<typeof setInterval>;
+        let lineIdx = 0;
+        demoInterval = setInterval(() => {
+          if (lineIdx < DEMO_SSH_LINES.length) {
+            term.write(DEMO_SSH_LINES[lineIdx] + "\r\n");
+            lineIdx++;
+          } else {
+            clearInterval(demoInterval!);
+          }
+        }, 300);
       };
 
       // Send keystrokes directly to the WebSocket
       term.onData((data) => {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: "uart-input", data }));
-        } else {
-          // Local echo fallback for demo mode
-          if (data === "\r") {
-            term.write("\r\n");
-          } else if (data === "\x7f") {
-            // Handle backspace locally in demo mode
-            term.write("\b \b");
-          } else {
-            term.write(data);
-          }
+          ws.send(JSON.stringify({ type: "ssh-input", data }));
         }
       });
 
@@ -132,10 +103,18 @@ export default function Terminal({ boardId, isFullscreen }: TerminalProps) {
       const handleResize = () => {
         try {
           fitAddon.fit();
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ 
+              type: "ssh-resize", 
+              cols: term.cols, 
+              rows: term.rows 
+            }));
+          }
         } catch (e) {
           // Fit might fail if container is hidden/collapsing
         }
       };
+      
       window.addEventListener("resize", handleResize);
       (term as any)._resizeHandler = handleResize;
     };
@@ -162,7 +141,7 @@ export default function Terminal({ boardId, isFullscreen }: TerminalProps) {
         <div className="w-3 h-3 rounded-full bg-warning/80" />
         <div className="w-3 h-3 rounded-full bg-success/80" />
         <span className="text-xs text-muted ml-2 font-medium font-mono">
-          UART Console — {boardId.slice(0, 8)}
+          SSH Terminal — {boardId.slice(0, 8)}
         </span>
       </div>
       <div ref={containerRef} className={`p-2 w-full ${isFullscreen ? 'flex-1 h-[calc(100vh-8rem)]' : 'h-60 sm:h-80'}`} />

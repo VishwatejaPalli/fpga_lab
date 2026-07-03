@@ -18,6 +18,8 @@ export async function GET() {
       name: users.name,
       role: users.role,
       verified: users.verified,
+      status: users.status,
+      lastLogin: users.lastLogin,
       createdAt: users.createdAt,
     })
     .from(users)
@@ -44,6 +46,18 @@ export async function GET() {
     .from(hwSessions)
     .where(eq(hwSessions.userId, session.userId));
 
+  const recentJobs = await db
+    .select({
+      id: jobs.id,
+      boardId: jobs.boardId,
+      status: jobs.status,
+      createdAt: jobs.createdAt,
+    })
+    .from(jobs)
+    .where(eq(jobs.userId, session.userId))
+    .orderBy(sql`${jobs.createdAt} DESC`)
+    .limit(5);
+
   return NextResponse.json({
     user,
     stats: {
@@ -52,6 +66,7 @@ export async function GET() {
       failedJobs: jobStats?.failedJobs ?? 0,
       totalSessions: sessionStats?.totalSessions ?? 0,
     },
+    recentJobs,
   });
 }
 

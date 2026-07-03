@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { getSession } from "@/lib/auth/session";
+import { withErrorHandler } from "@/lib/api-utils";
 import fs from "fs";
 import path from "path";
 
@@ -22,14 +23,13 @@ const ALLOWED_EXTENSIONS = new Set([
   ".gw",
 ]);
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler(async (req: NextRequest) => {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  try {
-    const formData = await req.formData();
+  const formData = await req.formData();
     const file = formData.get("bitstream") as File | null;
 
     if (!file) {
@@ -76,11 +76,4 @@ export async function POST(req: NextRequest) {
       filePath,
       size: file.size,
     });
-  } catch (error) {
-    console.error("[Upload] Error:", error);
-    return NextResponse.json(
-      { error: "Upload failed" },
-      { status: 500 }
-    );
-  }
-}
+});

@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
+import {
+  fetchPynqTelemetry,
+  checkPynqOnline,
+} from "@/lib/hardware/pynq-telemetry";
 
 export async function GET(
   _req: NextRequest,
@@ -10,31 +14,28 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // const { boardId } = await params;
+  const { boardId } = await params;
 
-  // Mock telemetry data for PYNQ-Z2
-  return NextResponse.json({
-    status: "online",
-    telemetry: {
-      cpu: {
-        temp: (42 + Math.random() * 8).toFixed(1) + "°C",
-        load: [ (Math.random() * 5).toFixed(1), (Math.random() * 3).toFixed(1) ],
-        freq: "650 MHz"
+  try {
+    const telemetry = await fetchPynqTelemetry(boardId);
+
+    return NextResponse.json({
+      status: "online",
+      telemetry,
+    });
+  } catch (err: any) {
+    console.error(`[PYNQ] Telemetry fetch failed for ${boardId}:`, err.message);
+
+    // Try a simple connectivity check
+    const online = await checkPynqOnline(boardId);
+
+    return NextResponse.json(
+      {
+        status: online ? "degraded" : "offline",
+        error: err.message,
+        telemetry: null,
       },
-      memory: {
-        total: "512 MB",
-        used: (120 + Math.random() * 40).toFixed(0) + " MB",
-        percent: ((120 + Math.random() * 40) / 5.12).toFixed(1) + "%"
-      },
-      fpga: {
-        overlay: "base.bit",
-        power: (0.8 + Math.random() * 0.4).toFixed(2) + " W",
-        clock: "100 MHz"
-      },
-      network: {
-        ip: "192.168.1.105",
-        uptime: "12h 45m"
-      }
-    }
-  });
+      { status: online ? 200 : 503 }
+    );
+  }
 }

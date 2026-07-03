@@ -4,10 +4,19 @@ import db from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { verifyPassword } from "@/lib/auth/password";
 import { signToken } from "@/lib/auth/jwt";
+import { rateLimit, withErrorHandler } from "@/lib/api-utils";
 import "@/lib/init";
 
-export async function POST(req: NextRequest) {
-  try {
+export const POST = withErrorHandler(async (req: NextRequest) => {
+  const ip = req.headers.get("x-forwarded-for") || "127.0.0.1";
+  
+  // Max 5 attempts per 15 minutes per IP
+  if (!rateLimit(`login_${ip}`, 5, 15 * 60 * 1000)) {
+    return NextResponse.json(
+      { error: "Too many login attempts, please try again later" },
+      { status: 429 }
+    );
+  }
     const { email, password } = await req.json();
 
     if (!email || !password) {
@@ -45,6 +54,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (user.status === "suspended") {
+      return NextResponse.json(
+        { error: "Your account is suspended. Contact administrator." },
+        { status: 403 }
+      );
+    }
+
+    db.update(users)
+      .set({ lastLogin: new Date().toISOString() })
+      .where(eq(users.id, user.id))
+      .run();
+
     const token = signToken({
       userId: user.id,
       email: user.email,
@@ -65,11 +86,4 @@ export async function POST(req: NextRequest) {
     });
 
     return response;
-  } catch (error) {
-    console.error("[Auth] Login error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
-  }
-}
+});

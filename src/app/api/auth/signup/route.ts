@@ -10,6 +10,7 @@ import {
   sendVerificationEmail,
 } from "@/lib/auth/email";
 import { z } from "zod";
+import { rateLimit, withErrorHandler } from "@/lib/api-utils";
 
 const signupSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -18,9 +19,17 @@ const signupSchema = z.object({
   role: z.enum(["student", "researcher"]).default("student"),
 });
 
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
+export const POST = withErrorHandler(async (req: NextRequest) => {
+  const ip = req.headers.get("x-forwarded-for") || "127.0.0.1";
+  
+  if (!rateLimit(`signup_${ip}`, 3, 60 * 60 * 1000)) { // 3 signups per hour per IP
+    return NextResponse.json(
+      { error: "Too many signups from this IP. Please try again later." },
+      { status: 429 }
+    );
+  }
+
+  const body = await req.json();
     const parsed = signupSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -80,11 +89,4 @@ export async function POST(req: NextRequest) {
       },
       { status: 201 }
     );
-  } catch (error) {
-    console.error("[Auth] Signup error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
-  }
-}
+});

@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import db from "@/lib/db";
 import { boards } from "@/lib/db/schema";
 import { getSession } from "@/lib/auth/session";
+import { withErrorHandler } from "@/lib/api-utils";
 
-export async function GET() {
+export const GET = withErrorHandler(async () => {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -31,4 +32,4 @@ export async function GET() {
   }));
 
   return NextResponse.json({ boards: parsed });
-}
+});

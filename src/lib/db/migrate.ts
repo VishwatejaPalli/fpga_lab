@@ -43,6 +43,8 @@ export function runMigrations() {
       board_image_url TEXT,
       blank_bitstream_path TEXT,
       programming_tool TEXT DEFAULT 'openFPGALoader',
+      ssh_username TEXT,
+      ssh_password TEXT,
       status TEXT NOT NULL DEFAULT 'free',
       current_session_id TEXT,
       capabilities TEXT DEFAULT '[]',
@@ -133,6 +135,8 @@ export function runMigrations() {
   safeAlter("ALTER TABLE boards ADD COLUMN board_image_url TEXT");
   safeAlter("ALTER TABLE boards ADD COLUMN blank_bitstream_path TEXT");
   safeAlter("ALTER TABLE boards ADD COLUMN ip_address TEXT");
+  safeAlter("ALTER TABLE boards ADD COLUMN ssh_username TEXT");
+  safeAlter("ALTER TABLE boards ADD COLUMN ssh_password TEXT");
 
   console.log("[DB] Migrations complete");
 }

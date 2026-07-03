@@ -5,7 +5,7 @@ import db from "@/lib/db";
 import { jobs, boards, hwSessions } from "@/lib/db/schema";
 import { getSession } from "@/lib/auth/session";
 import { z } from "zod";
-import { runDemoJob } from "@/lib/fpga/demo-runner";
+import { withErrorHandler } from "@/lib/api-utils";
 
 const jobSchema = z.object({
   boardId: z.string().uuid(),
@@ -13,7 +13,7 @@ const jobSchema = z.object({
   bitstreamName: z.string().min(1),
 });
 
-export async function GET() {
+export const GET = withErrorHandler(async () => {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -32,16 +32,15 @@ export async function GET() {
           .all();
 
   return NextResponse.json({ jobs: userJobs });
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler(async (req: NextRequest) => {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  try {
-    const body = await req.json();
+  const body = await req.json();
     const parsed = jobSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -71,8 +70,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check if user already has an active session — auto-end for demo flow
-    const activeSession = db
+    // Auto-end the user's current active session if they have one
+    const userActiveSession = db
       .select()
       .from(hwSessions)
       .where(
@@ -83,23 +82,45 @@ export async function POST(req: NextRequest) {
       )
       .get();
 
-    if (activeSession) {
-      // Auto-end previous session for demo convenience
+    if (userActiveSession) {
       db.update(hwSessions)
         .set({ status: "ended" })
-        .where(eq(hwSessions.id, activeSession.id))
+        .where(eq(hwSessions.id, userActiveSession.id))
         .run();
 
-      // Free the old board
-      if (activeSession.boardId) {
+      if (userActiveSession.boardId && userActiveSession.boardId !== boardId) {
         db.update(boards)
           .set({ status: "free" })
-          .where(eq(boards.id, activeSession.boardId))
+          .where(eq(boards.id, userActiveSession.boardId))
           .run();
       }
     }
 
-    // Create job
+    // Prevent concurrent uploads/sessions to a board in use
+    const boardActiveSession = db
+      .select()
+      .from(hwSessions)
+      .where(
+        and(
+          eq(hwSessions.boardId, boardId),
+          eq(hwSessions.status, "active")
+        )
+      )
+      .get();
+
+    if (
+      board.status === "busy" ||
+      board.status === "programming" ||
+      board.status === "allocated" ||
+      (boardActiveSession && (!userActiveSession || boardActiveSession.userId !== session.userId))
+    ) {
+      return NextResponse.json(
+        { error: "Board is currently in use by another session or programming job." },
+        { status: 409 }
+      );
+    }
+
+    // Create job (The JobQueue will automatically pick this up and process it)
     const jobId = uuid();
     db.insert(jobs)
       .values({
@@ -112,25 +133,8 @@ export async function POST(req: NextRequest) {
       })
       .run();
 
-    // Start demo simulation in background (runs without blocking the response)
-    // In production with real hardware, this would dispatch to openFPGALoader instead
-    runDemoJob(jobId, boardId, session.userId, bitstreamName).catch((err) => {
-      console.error("[Jobs] Demo runner error:", err);
-      db.update(jobs)
-        .set({ status: "failed", logs: `Error: ${err.message}` })
-        .where(eq(jobs.id, jobId))
-        .run();
-    });
-
     return NextResponse.json(
-      { id: jobId, status: "queued", message: "Job queued" },
+      { id: jobId, status: "queued", message: "Job queued for programming" },
       { status: 201 }
     );
-  } catch (error) {
-    console.error("[Jobs] Create error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
-  }
-}
+});

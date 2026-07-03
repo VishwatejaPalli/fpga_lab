@@ -5,6 +5,7 @@ import { resetBoard } from "@/lib/fpga/reset";
 import { FPGAProgrammer } from "@/lib/fpga/programmer";
 import { uartService } from "@/lib/hardware/uart";
 import { cameraService } from "@/lib/hardware/camera";
+import { sshService } from "@/lib/hardware/ssh";
 import fs from "fs";
 
 /**
@@ -54,10 +55,53 @@ class SessionEnforcer {
         await this.endSession(session);
       }
     }
+
+    // Auto-cleanup old bitstreams (>24h)
+    this.cleanupUploads();
+  }
+
+  private cleanupUploads() {
+    const uploadDir = process.env.UPLOAD_DIR || "./uploads";
+    if (!fs.existsSync(uploadDir)) return;
+
+    try {
+      const users = fs.readdirSync(uploadDir);
+      const now = Date.now();
+      const maxAgeMs = 24 * 60 * 60 * 1000; // 24 hours
+
+      for (const userId of users) {
+        const userDir = require("path").join(uploadDir, userId);
+        if (!fs.statSync(userDir).isDirectory()) continue;
+
+        const files = fs.readdirSync(userDir);
+        for (const file of files) {
+          const filePath = require("path").join(userDir, file);
+          const stats = fs.statSync(filePath);
+          
+          if (stats.isDirectory()) {
+             // Handle uuid folders from new upload route
+             const innerFiles = fs.readdirSync(filePath);
+             for(const innerFile of innerFiles) {
+                const innerPath = require("path").join(filePath, innerFile);
+                if (now - fs.statSync(innerPath).mtimeMs > maxAgeMs) {
+                   fs.unlinkSync(innerPath);
+                }
+             }
+             if (fs.readdirSync(filePath).length === 0) {
+                fs.rmdirSync(filePath);
+             }
+          } else if (now - stats.mtimeMs > maxAgeMs) {
+            fs.unlinkSync(filePath);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[Sessions] Failed to cleanup uploads:", err);
+    }
   }
 
   /**
-   * Cleanup a session: stop UART, stop camera, reset FPGA, release board.
+   * Cleanup a session: stop UART, stop camera, stop SSH, reset FPGA, release board.
    */
   async endSession(
     session: typeof hwSessions.$inferSelect,
@@ -69,6 +113,9 @@ class SessionEnforcer {
 
       // Stop camera
       cameraService.stop(session.boardId);
+
+      // Stop SSH
+      sshService.close(session.boardId);
 
       // Get board for reset
       const board = db

@@ -191,8 +191,8 @@ function ProgramContent() {
     }
   }
 
-  const freeBoards = boards.filter(
-    (b) => b.status === "free" || b.id === selectedBoardId
+  const availableBoards = boards.filter(
+    (b) => b.status !== "offline" || b.id === selectedBoardId
   );
 
   return (
@@ -255,9 +255,9 @@ function ProgramContent() {
               disabled={!!jobId}
             >
               <option value="">Choose an FPGA board...</option>
-              {freeBoards.map((board) => (
+              {availableBoards.map((board) => (
                 <option key={board.id} value={board.id}>
-                  {board.name} — {board.fpgaFamily} ({board.status})
+                  {board.name} — {board.fpgaFamily} {board.status === "busy" ? "(Currently in use - will overwrite)" : ""}
                 </option>
               ))}
             </select>
