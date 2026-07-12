@@ -13,6 +13,15 @@ A full-stack web application that lets students remotely program and interact wi
 - **Admin Panel** — Register boards, manage users, monitor system status
 - **Job Queue** — Queued programming jobs with per-board mutex and real-time log streaming
 
+## Security & Stability
+
+- **Robust Sanitization** — Full command injection protection across all API routes and hardware integration points.
+- **SSH Firewall** — Built-in stream parser that blocks dangerous shell commands before they reach the remote FPGA host.
+- **Path Traversal Protection** — Safe handling of user uploads and bitstream files.
+- **Graceful Shutdown** — Elegantly cleans up active camera feeds, serial ports, and WebSocket connections on server exit.
+- **Database Optimization** — Optimized polling queries with strategic indexes to prevent background task CPU spikes.
+- **Smart Reconnection** — Auto-recovery for unstable camera streams and resilient session timeout enforcement.
+
 ## Architecture
 
 ```
