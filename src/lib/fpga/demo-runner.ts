@@ -11,6 +11,9 @@ import { v4 as uuid } from "uuid";
 import db from "@/lib/db";
 import { jobs, boards, hwSessions } from "@/lib/db/schema";
 
+import fs from "fs";
+import crypto from "crypto";
+
 // Initialize global job event emitter if not already set
 if (!globalThis.__jobQueue) {
   globalThis.__jobQueue = new EventEmitter();
@@ -22,7 +25,7 @@ interface DemoLogLine {
   delay: number; // ms to wait before emitting this line
 }
 
-function getDemoLogSequence(bitstreamName: string, boardName: string): DemoLogLine[] {
+function getDemoLogSequence(bitstreamName: string, boardName: string, bitstreamPath: string): DemoLogLine[] {
   // Determine FPGA part from board name
   let fpgaPart = "xc7a35tcpg236-1";
   let idcode = "0x0362D093";
@@ -47,7 +50,28 @@ function getDemoLogSequence(bitstreamName: string, boardName: string): DemoLogLi
   }
 
   const designName = bitstreamName.replace(/\.(bit|bin|svf|rbf|sof)$/i, "");
-  const fileSize = "2.5";
+  
+  let fileSize = "2.5";
+  let fileSizeBytes = 2621440;
+  let crcStr = "8A4F";
+  
+  if (bitstreamPath && fs.existsSync(bitstreamPath)) {
+    try {
+      const stats = fs.statSync(bitstreamPath);
+      fileSizeBytes = stats.size;
+      fileSize = (fileSizeBytes / (1024 * 1024)).toFixed(2);
+      const content = fs.readFileSync(bitstreamPath);
+      // Generate a CRC32-like checksum by slicing MD5 hash
+      const hash = crypto.createHash("md5").update(content).digest("hex");
+      crcStr = hash.slice(0, 8).toUpperCase();
+    } catch (err) {
+      console.error("Failed to read real bitstream properties:", err);
+    }
+  }
+
+  // Generate a persistent board DNA based on board name
+  const dnaHash = crypto.createHash("md5").update(boardName).digest("hex").slice(0, 16).toUpperCase();
+  const dnaStr = `0x${dnaHash}`;
 
   return [
     { text: `$ openFPGALoader --board auto -f ${bitstreamName}\n`, delay: 0 },
@@ -71,10 +95,10 @@ function getDemoLogSequence(bitstreamName: string, boardName: string): DemoLogLi
     { text: `  Design name:   ${designName}\n`, delay: 150 },
     { text: `  Part name:     ${fpgaPart.split("-")[0]}\n`, delay: 100 },
     { text: `  Date:          ${new Date().toISOString().split("T")[0]}\n`, delay: 100 },
-    { text: `  File size:     ${fileSize} MB (2621440 bytes)\n`, delay: 100 },
-    { text: `  Bitstream CRC: 0x8A4F\n`, delay: 200 },
+    { text: `  File size:     ${fileSize} MB (${fileSizeBytes} bytes)\n`, delay: 100 },
+    { text: `  Bitstream CRC: 0x${crcStr}\n`, delay: 200 },
     { text: `\n`, delay: 100 },
-    { text: `DNA: 0x4002000001234567\n`, delay: 300 },
+    { text: `DNA: ${dnaStr}\n`, delay: 300 },
     { text: `\n`, delay: 200 },
     { text: `Erasing device...`, delay: 800 },
     { text: ` done.\n`, delay: 1200 },
@@ -120,13 +144,18 @@ export async function runDemoJob(
   const board = db.select().from(boards).where(eq(boards.id, boardId)).get();
   const boardName = board?.name || "Basys 3";
 
-  const logSequence = getDemoLogSequence(bitstreamName, boardName);
+  // Look up job to get bitstreamPath
+  const job = db.select().from(jobs).where(eq(jobs.id, jobId)).get();
+  const bitstreamPath = job?.bitstreamPath || "";
+
+  const logSequence = getDemoLogSequence(bitstreamName, boardName, bitstreamPath);
 
   // Update job to "programming"
   db.update(jobs)
     .set({ status: "programming" })
     .where(eq(jobs.id, jobId))
     .run();
+
 
   // Wait for WebSocket clients to connect before streaming logs
   await sleep(1500);
@@ -149,7 +178,8 @@ export async function runDemoJob(
 
   // Create hardware session
   const sessionId = uuid();
-  const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString(); // 30 min
+  const timeoutMinutes = board?.sessionTimeoutMinutes || 30;
+  const expiresAt = new Date(Date.now() + timeoutMinutes * 60 * 1000).toISOString();
 
   db.insert(hwSessions)
     .values({
@@ -164,7 +194,7 @@ export async function runDemoJob(
 
   // Update board status
   db.update(boards)
-    .set({ status: "busy" })
+    .set({ status: "allocated" })
     .where(eq(boards.id, boardId))
     .run();
 

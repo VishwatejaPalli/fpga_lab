@@ -2,6 +2,7 @@ import { EventEmitter } from "events";
 import { eq } from "drizzle-orm";
 import db from "@/lib/db";
 import { boards } from "@/lib/db/schema";
+import { decryptSafe } from "@/lib/auth/crypto";
 
 /**
  * SSH Service — manages SSH connections to network-attached FPGA boards.
@@ -43,7 +44,7 @@ class SSHService extends EventEmitter {
 
     const ipAddress = board.ipAddress;
     const username = board.sshUsername || "xilinx";
-    const password = board.sshPassword || "xilinx";
+    const password = decryptSafe(board.sshPassword) || "xilinx";
 
     try {
       // Use eval-require to prevent Turbopack from trying to resolve native modules at build time
@@ -106,31 +107,42 @@ class SSHService extends EventEmitter {
     const entry = this.clients.get(boardId);
     if (!entry) return;
 
-    // Buffer accumulation for basic security filter
+    // Advanced buffer accumulation for firewall filtering
     for (const char of data) {
       if (char === '\r' || char === '\n') {
-        const cmd = entry.inputBuffer.toLowerCase().trim();
-        if (
-          cmd.includes("reboot") ||
-          cmd.includes("shutdown") ||
-          cmd.includes("poweroff") ||
-          cmd.includes("rm -rf") ||
-          cmd.includes("mkfs")
-        ) {
-          console.warn(`[SSH] Blocked dangerous command on board ${boardId}: ${cmd}`);
-          entry.stream.write("\x03\r\n\x1b[31m[Blocked] Dangerous command not allowed.\x1b[0m\r\n");
+        // Strip out common PTY ANSI escape sequences
+        const cleanCmd = entry.inputBuffer
+          .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")
+          .replace(/\x1b/g, "")
+          .toLowerCase()
+          .trim();
+
+        // Check for dangerous commands matching word boundaries
+        const dangerousPattern = /\b(sudo|su|reboot|shutdown|poweroff|rm|mkfs|dd|chown|chmod|chroot|systemctl|wget|curl)\b/;
+        if (dangerousPattern.test(cleanCmd)) {
+          console.warn(`[SSH] Antigravity Firewall blocked dangerous command on board ${boardId}: ${cleanCmd}`);
+          // Send Ctrl+C to cancel the current line on the remote shell
+          entry.stream.write("\x03\r\n\x1b[31m[Antigravity SSH Firewall: Command Blocked for Security]\x1b[0m\r\n");
           entry.inputBuffer = "";
-          return; // Skip writing the newline to prevent execution
+          continue; // Block execution of the newline, skip to next char
         }
+        
+        // Command is safe, write the newline
         entry.inputBuffer = "";
+        entry.stream.write(char);
       } else if (char === '\x7f' || char === '\b') {
+        // Handle backspace locally for buffer tracking
         entry.inputBuffer = entry.inputBuffer.slice(0, -1);
-      } else if (char.charCodeAt(0) >= 32 && char.charCodeAt(0) <= 126) {
-        entry.inputBuffer += char;
+        entry.stream.write(char);
+      } else {
+        // Only track printable characters for safety check
+        if (char.charCodeAt(0) >= 32 && char.charCodeAt(0) <= 126) {
+          entry.inputBuffer += char;
+        }
+        // Echo character immediately for interactive feel
+        entry.stream.write(char);
       }
     }
-
-    entry.stream.write(data);
   }
 
   /**

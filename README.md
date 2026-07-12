@@ -17,13 +17,13 @@ A full-stack web application that lets students remotely program and interact wi
 
 ```
 ┌─────────────────┐     ┌──────────────────┐     ┌──────────────────┐     ┌───────────┐
-│   Browser        │◄───►│  Next.js + WS    │◄───►│  FPGA Services   │◄───►│  Hardware  │
-│   (React SPA)    │     │  (server.js)     │     │  (programmer,    │     │  (JTAG,    │
-│                  │     │  Port 3000       │     │   UART, camera)  │     │   USB,     │
-│  - Dashboard     │     │  - API routes    │     │  - openFPGALoader│     │   serial)  │
-│  - Upload        │     │  - WebSocket     │     │  - serialport    │     │           │
-│  - Terminal      │     │  - Auth/JWT      │     │  - ffmpeg        │     │           │
-│  - Camera        │     │  - SQLite/Drizzle│     │  - Job queue     │     │           │
+│   Browser       │◄───►│  Next.js + WS    │◄───►│  FPGA Services   │◄───►│  Hardware │
+│   (React SPA)   │     │  (server.js)     │     │  (programmer,    │     │  (JTAG,   │
+│                 │     │  Port 3000       │     │   UART, camera)  │     │   USB,    │
+│  - Dashboard    │     │  - API routes    │     │  - openFPGALoader│     │   serial) │
+│  - Upload       │     │  - WebSocket     │     │  - serialport    │     │           │
+│  - Termina      │     │  - Auth/JWT      │     │  - ffmpeg        │     │           │
+│  - Camera       │     │  - SQLite/Drizzle│     │  - Job queue     │     │           │
 └─────────────────┘     └──────────────────┘     └──────────────────┘     └───────────┘
 ```
 
@@ -32,13 +32,13 @@ A full-stack web application that lets students remotely program and interact wi
 | Layer      | Technology                                       |
 |------------|--------------------------------------------------|
 | Frontend   | Next.js 16 (App Router), React 19, Tailwind v4   |
-| Backend    | Next.js API Routes, custom `server.js` for WS     |
-| Database   | SQLite (better-sqlite3) + Drizzle ORM             |
-| Auth       | JWT (httpOnly cookies), bcryptjs, nodemailer       |
-| FPGA       | openFPGALoader (+ xsct, quartus_pgm overrides)    |
-| Serial     | serialport (Node.js native)                        |
-| Camera     | ffmpeg → MJPEG over HTTP                           |
-| WebSocket  | ws library (UART console, job logs)                |
+| Backend    | Next.js API Routes, custom `server.js` for WS    |
+| Database   | SQLite (better-sqlite3) + Drizzle ORM            |
+| Auth       | JWT (httpOnly cookies), bcryptjs, nodemailer     |
+| FPGA       | openFPGALoader (+ xsct, quartus_pgm overrides)   |
+| Serial     | serialport (Node.js native)                      |
+| Camera     | ffmpeg → MJPEG over HTTP                         |
+| WebSocket  | ws library (UART console, job logs)              |
 
 ## Prerequisites
 
@@ -84,7 +84,7 @@ All settings are in `.env.local` (see `.env.example` for reference):
 
 | Variable                 | Description                          | Default                    |
 |--------------------------|--------------------------------------|----------------------------|
-| `DB_PATH`                | SQLite database file path            | `./data/fpga_lab.db`      |
+| `DB_PATH`                | SQLite database file path            | `./data/fpga_lab.db`       |
 | `JWT_SECRET`             | Secret for signing JWT tokens        | *(must change)*            |
 | `SMTP_HOST`              | SMTP server hostname                 | `smtp.office365.com`       |
 | `SMTP_PORT`              | SMTP server port                     | `587`                      |
@@ -277,8 +277,8 @@ fpga_ssh/
 
 ## Supported Bitstream Formats
 
-| Extension | Vendor        | Description               |
-|-----------|---------------|---------------------------|
+| Extension | Vendor        | Description                |
+|-----------|---------------|----------------------------|
 | `.bit`    | Xilinx        | Standard bitstream         |
 | `.bin`    | Various       | Raw binary bitstream       |
 | `.svf`    | Various       | Serial Vector Format       |
@@ -293,14 +293,14 @@ fpga_ssh/
 
 ## Troubleshooting
 
-| Issue                          | Solution                                          |
-|--------------------------------|---------------------------------------------------|
-| `openFPGALoader: not found`    | Install: `apt install openfpgaloader` or build from source |
-| `Permission denied: /dev/ttyUSB0` | `sudo usermod -aG dialout $USER` then re-login  |
-| SMTP emails not sending        | Check SMTP credentials in `.env.local`; for dev, check console logs |
-| Camera feed not working        | Ensure `ffmpeg` installed, camera device exists: `ls /dev/video*` |
-| WebSocket connection failed    | Ensure you're using `node server.js`, not `next dev` directly |
-| Build fails with serialport    | Run `npm rebuild` to rebuild native modules       |
+| Issue                               | Solution                                                              |
+|-------------------------------------|-----------------------------------------------------------------------|
+| `openFPGALoader: not found`         | Install: `apt install openfpgaloader` or build from source            |
+| `Permission denied: /dev/ttyUSB0`   | `sudo usermod -aG dialout $USER` then re-login                        |
+| SMTP emails not sending             | Check SMTP credentials in `.env.local`; for dev, check console logs   |
+| Camera feed not working             | Ensure `ffmpeg` installed, camera device exists: `ls /dev/video*`     |
+| WebSocket connection failed         | Ensure you're using `node server.js`, not `next dev` directly         |
+| Build fails with serialport         | Run `npm rebuild` to rebuild native modules                           |
 
 ## License
 

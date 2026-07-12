@@ -55,12 +55,21 @@ export default function Terminal({ boardId, isFullscreen }: TerminalProps) {
         term.write("\r\x1b[32m[Connected to UART]\x1b[0m\r\n");
       };
 
+      let sessionExpired = false;
+
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === "uart-data") {
             // Replace \n with \r\n for xterm line wrapping
             term.write(msg.data.replace(/\r?\n/g, "\r\n"));
+          } else if (msg.type === "session-expired") {
+            sessionExpired = true;
+            term.write("\r\n\x1b[31m[SESSION EXPIRED / TERMINATED]\x1b[0m\r\n");
+            term.write("\x1b[90mRedirecting to dashboard...\x1b[0m\r\n");
+            setTimeout(() => {
+              window.location.href = "/dashboard";
+            }, 3000);
           }
         } catch {
           term.write(event.data.replace(/\r?\n/g, "\r\n"));
@@ -68,12 +77,13 @@ export default function Terminal({ boardId, isFullscreen }: TerminalProps) {
       };
 
       ws.onclose = () => {
+        if (sessionExpired) return;
         term.write("\r\n\x1b[33m[Disconnected — Board UART not reachable]\x1b[0m\r\n");
         term.write("\x1b[90mRetrying connection every 5 seconds...\x1b[0m\r\n");
 
         // Auto-reconnect every 5 seconds
         const reconnect = () => {
-          if (isDestroyed) return;
+          if (isDestroyed || sessionExpired) return;
           term.write("\r\x1b[90m[Reconnecting...]\x1b[0m\r\n");
           const retryWs = new WebSocket(wsUrl);
 
@@ -86,6 +96,14 @@ export default function Terminal({ boardId, isFullscreen }: TerminalProps) {
                 const msg = JSON.parse(event.data);
                 if (msg.type === "uart-data") {
                   term.write(msg.data.replace(/\r?\n/g, "\r\n"));
+                } else if (msg.type === "session-expired") {
+                  sessionExpired = true;
+                  term.write("\r\n\x1b[31m[SESSION EXPIRED / TERMINATED]\x1b[0m\r\n");
+                  term.write("\x1b[90mRedirecting to dashboard...\x1b[0m\r\n");
+                  setTimeout(() => {
+                    window.location.href = "/dashboard";
+                  }, 3000);
+                  retryWs.close();
                 }
               } catch {
                 term.write(event.data.replace(/\r?\n/g, "\r\n"));
@@ -93,6 +111,7 @@ export default function Terminal({ boardId, isFullscreen }: TerminalProps) {
             };
 
             retryWs.onclose = () => {
+              if (sessionExpired) return;
               term.write("\r\n\x1b[33m[Connection lost]\x1b[0m\r\n");
               if (!isDestroyed) {
                 demoInterval = setTimeout(reconnect, 5000) as unknown as ReturnType<typeof setInterval>;
@@ -102,7 +121,7 @@ export default function Terminal({ boardId, isFullscreen }: TerminalProps) {
 
           retryWs.onerror = () => {
             retryWs.close();
-            if (!isDestroyed) {
+            if (!isDestroyed && !sessionExpired) {
               demoInterval = setTimeout(reconnect, 5000) as unknown as ReturnType<typeof setInterval>;
             }
           };
@@ -115,16 +134,6 @@ export default function Terminal({ boardId, isFullscreen }: TerminalProps) {
       term.onData((data) => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: "uart-input", data }));
-        } else {
-          // Local echo fallback for demo mode
-          if (data === "\r") {
-            term.write("\r\n");
-          } else if (data === "\x7f") {
-            // Handle backspace locally in demo mode
-            term.write("\b \b");
-          } else {
-            term.write(data);
-          }
         }
       });
 

@@ -1,12 +1,16 @@
 import { spawn, type ChildProcess } from "child_process";
 import { EventEmitter } from "events";
 
+import { decryptSafe } from "@/lib/auth/crypto";
+
 export interface ProgramOptions {
   boardType: string; // openFPGALoader board name e.g. "basys3"
   bitstreamPath: string;
   programmingTool?: string; // defaults to "openFPGALoader"
   devicePath?: string | null;
   ipAddress?: string | null;
+  sshUsername?: string | null;
+  sshPassword?: string | null;
   timeout?: number; // ms, default 120000
 }
 
@@ -48,14 +52,30 @@ export class FPGAProgrammer extends EventEmitter {
           return resolve({ success: false, exitCode: 1, logs: errorMsg, duration: 0 });
         }
         
-        const remoteScript = `python3 -c "from pynq import Overlay; Overlay('/home/xilinx/lab_bitstream.bit')"`;
-        const bashCmd = `scp -o StrictHostKeyChecking=no ${bitstreamPath} xilinx@${options.ipAddress}:/home/xilinx/lab_bitstream.bit && ssh -o StrictHostKeyChecking=no xilinx@${options.ipAddress} '${remoteScript}'`;
+        const username = (options.sshUsername || "xilinx").replace(/[^a-zA-Z0-9_-]/g, "");
+        const ipAddress = options.ipAddress.replace(/[^a-zA-Z0-9.-]/g, "");
+        const password = options.sshPassword ? decryptSafe(options.sshPassword) : null;
         
-        this.emit("log", `[FPGA] Starting: SCP & SSH to ${options.ipAddress}\n`);
+        const safeBitstreamPath = bitstreamPath.replace(/[^a-zA-Z0-9_./-]/g, "");
+        const remoteScript = `python3 -c "from pynq import Overlay; Overlay('/home/xilinx/lab_bitstream.bit')"`;
+        
+        let scpCmd = `scp -o StrictHostKeyChecking=no ${safeBitstreamPath} ${username}@${ipAddress}:/home/xilinx/lab_bitstream.bit`;
+        let sshCmd = `ssh -o StrictHostKeyChecking=no ${username}@${ipAddress} '${remoteScript}'`;
+        
+        let envVars = { ...process.env };
+        if (password) {
+          scpCmd = `sshpass -e ${scpCmd}`;
+          sshCmd = `sshpass -e ${sshCmd}`;
+          envVars.SSHPASS = password;
+        }
+        
+        const bashCmd = `${scpCmd} && ${sshCmd}`;
+        
+        this.emit("log", `[FPGA] Starting: SCP & SSH to ${ipAddress}\n`);
         
         this.process = spawn("bash", ["-c", bashCmd], {
           timeout,
-          env: { ...process.env },
+          env: envVars,
         });
       } else {
         const args = this.buildArgs(programmingTool, boardType, bitstreamPath, devicePath, options.ipAddress);

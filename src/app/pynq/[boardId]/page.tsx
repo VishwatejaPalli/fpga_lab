@@ -172,17 +172,18 @@ export default function JupyterPage({ params }: { params: Promise<{ boardId: str
   }, [jupyterUrl, autoOpened]);
 
   async function handleEndSession() {
-    if (!session) return;
-    try {
-      await fetch("/api/sessions", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: session.id }),
-      });
-      router.push("/dashboard");
-    } catch (err) {
-      console.error("Failed to end session:", err);
+    if (session) {
+      try {
+        await fetch("/api/sessions", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: session.id }),
+        });
+      } catch (err) {
+        console.error("Failed to end session:", err);
+      }
     }
+    router.push("/dashboard");
   }
 
   return (

@@ -25,7 +25,15 @@ export async function getSession(): Promise<JWTPayload | null> {
   const token = cookieStore.get("token")?.value;
   if (token) {
     const payload = verifyToken(token);
-    if (payload) return payload;
+    if (payload) {
+      const user = sqlite
+        .prepare("SELECT token_version, status FROM users WHERE id = ?")
+        .get(payload.userId) as { token_version: number; status: string } | undefined;
+      
+      if (user && user.status === "active" && (!payload.version || payload.version === user.token_version)) {
+        return payload;
+      }
+    }
   }
 
   // Fallback: Check Authorization header for API Keys (e.g. Bearer fpga_xxxx)

@@ -126,7 +126,7 @@ export default function DashboardPage() {
                   Active Session
                 </h3>
                 <p className="text-sm text-muted mt-2">
-                  Board: {activeSession.boardId.slice(0, 8)}... — Expires:{" "}
+                  Board: {boards.find(b => b.id === activeSession.boardId)?.name || activeSession.boardId.slice(0, 8)} — Expires:{" "}
                   {new Date(activeSession.expiresAt).toLocaleTimeString()}
                 </p>
               </div>

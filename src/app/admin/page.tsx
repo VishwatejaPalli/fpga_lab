@@ -1005,10 +1005,10 @@ export default function AdminPage() {
                         key={cap}
                         type="button"
                         onClick={() => toggleCapability(cap)}
-                        className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                        className={`px-3 py-1.5 rounded-lg text-sm border transition-all duration-150 ${
                           boardForm.capabilities.includes(cap)
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border text-muted hover:border-muted"
+                            ? "bg-emerald-600 border-emerald-600 text-white font-semibold shadow-sm shadow-emerald-600/10 scale-95"
+                            : "bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500 hover:border-slate-400 hover:text-slate-700"
                         }`}
                       >
                         {cap}

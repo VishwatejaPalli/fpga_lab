@@ -5,6 +5,7 @@ import db from "@/lib/db";
 import { boards } from "@/lib/db/schema";
 import { getSession } from "@/lib/auth/session";
 import { z } from "zod";
+import { encrypt, decryptSafe } from "@/lib/auth/crypto";
 
 const boardSchema = z.object({
   name: z.string().min(1),
@@ -33,6 +34,7 @@ export async function GET() {
   const allBoards = db.select().from(boards).all();
   const parsed = allBoards.map((b) => ({
     ...b,
+    sshPassword: b.sshPassword ? decryptSafe(b.sshPassword) : null,
     capabilities: JSON.parse(b.capabilities || "[]"),
   }));
 
@@ -58,6 +60,7 @@ export async function POST(req: NextRequest) {
 
     const data = parsed.data;
     const id = uuid();
+    const encryptedPassword = data.sshPassword ? encrypt(data.sshPassword) : null;
 
     db.insert(boards)
       .values({
@@ -74,7 +77,7 @@ export async function POST(req: NextRequest) {
         blankBitstreamPath: data.blankBitstreamPath || null,
         programmingTool: data.programmingTool,
         sshUsername: data.sshUsername || null,
-        sshPassword: data.sshPassword || null,
+        sshPassword: encryptedPassword,
         capabilities: JSON.stringify(data.capabilities),
         sessionTimeoutMinutes: data.sessionTimeoutMinutes,
         status: "free",
@@ -113,6 +116,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     const data = parsed.data;
+    const encryptedPassword = data.sshPassword ? encrypt(data.sshPassword) : null;
 
     db.update(boards)
       .set({
@@ -128,7 +132,7 @@ export async function PATCH(req: NextRequest) {
         blankBitstreamPath: data.blankBitstreamPath || null,
         programmingTool: data.programmingTool,
         sshUsername: data.sshUsername || null,
-        sshPassword: data.sshPassword || null,
+        sshPassword: encryptedPassword,
         capabilities: JSON.stringify(data.capabilities),
         sessionTimeoutMinutes: data.sessionTimeoutMinutes,
       })

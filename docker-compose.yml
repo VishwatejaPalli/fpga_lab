@@ -1,0 +1,32 @@
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fpga_lab_app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DB_PATH=/app/data/fpga_lab.db
+      - UPLOAD_DIR=/app/uploads
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-me}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      - ALLOWED_EMAIL_DOMAINS=${ALLOWED_EMAIL_DOMAINS:-*}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_FROM=${SMTP_FROM:-FPGA Lab <noreply@lab.org>}
+    volumes:
+      # Persist SQLite database and uploads directory
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+      # Give container hardware access to JTAG/UART/Video (adjust paths if required)
+      - /dev:/dev
+    devices:
+      - "/dev/bus/usb:/dev/bus/usb"
+    privileged: true # Required for direct JTAG device mapping and openFPGALoader
+    restart: unless-stopped

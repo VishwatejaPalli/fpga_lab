@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 // ─── Users ───────────────────────────────────────────────────────────────────
@@ -15,6 +15,8 @@ export const users = sqliteTable("users", {
     .notNull()
     .default("active"),
   lastLogin: text("last_login"),
+  tokenVersion: integer("token_version").notNull().default(1),
+  lockedUntil: text("locked_until"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),
@@ -87,13 +89,18 @@ export const jobs = sqliteTable("jobs", {
   })
     .notNull()
     .default("queued"),
+  priority: integer("priority").notNull().default(0),
+  batchId: text("batch_id"),
+  fileSize: integer("file_size").default(0),
   logs: text("logs").default(""),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),
   startedAt: text("started_at"),
   completedAt: text("completed_at"),
-});
+}, (table) => ({
+  statusIdx: index("jobs_status_idx").on(table.status),
+}));
 
 // ─── Hardware Sessions ──────────────────────────────────────────────────────
 export const hwSessions = sqliteTable("hw_sessions", {
@@ -112,7 +119,9 @@ export const hwSessions = sqliteTable("hw_sessions", {
   status: text("status", { enum: ["active", "expired", "ended"] })
     .notNull()
     .default("active"),
-});
+}, (table) => ({
+  statusIdx: index("hw_sessions_status_idx").on(table.status),
+}));
 
 // ─── Experiment Notes (Researcher) ──────────────────────────────────────────
 export const experimentNotes = sqliteTable("experiment_notes", {
@@ -187,4 +196,59 @@ export const batchJobs = sqliteTable("batch_jobs", {
     .notNull()
     .default(sql`(datetime('now'))`),
   completedAt: text("completed_at"),
+});
+
+// ─── Security Refresh Tokens ────────────────────────────────────────────────
+export const refreshTokens = sqliteTable("refresh_tokens", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: text("expires_at").notNull(),
+  userAgent: text("user_agent"),
+  ipAddress: text("ip_address"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
+
+// ─── Password Reset Tokens ──────────────────────────────────────────────────
+export const passwordResetTokens = sqliteTable("password_reset_tokens", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: text("expires_at").notNull(),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
+
+// ─── Login Attempts (Rate Limiting) ─────────────────────────────────────────
+export const loginAttempts = sqliteTable("login_attempts", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull(),
+  ipAddress: text("ip_address").notNull(),
+  count: integer("count").notNull().default(0),
+  resetAt: text("reset_at").notNull(),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
+
+// ─── Audit Logs ─────────────────────────────────────────────────────────────
+export const auditLogs = sqliteTable("audit_logs", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .references(() => users.id, { onDelete: "set null" }),
+  action: text("action").notNull(),
+  target: text("target"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  metadata: text("metadata").default("{}"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
 });

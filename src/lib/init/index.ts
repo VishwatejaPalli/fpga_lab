@@ -5,6 +5,7 @@ import { sessionEnforcer } from "@/lib/sessions/enforcer";
 import { uartService } from "@/lib/hardware/uart";
 import { sshService } from "@/lib/hardware/ssh";
 import { cameraService } from "@/lib/hardware/camera";
+import { boardHealthMonitor } from "@/lib/hardware/board-health";
 
 let initialized = false;
 
@@ -79,6 +80,9 @@ export function initializeServer() {
 
   // Start session enforcer
   sessionEnforcer.start();
+
+  // Start board health monitor
+  boardHealthMonitor.start();
 
   // Expose services globally for WebSocket handlers in server.js
   (globalThis as Record<string, unknown>).__jobQueue = jobQueue;

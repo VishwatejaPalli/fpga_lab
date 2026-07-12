@@ -6,6 +6,9 @@ import { jobs, boards, hwSessions } from "@/lib/db/schema";
 import { getSession } from "@/lib/auth/session";
 import { z } from "zod";
 import { withErrorHandler } from "@/lib/api-utils";
+import { validateBitstream } from "@/lib/fpga/bitstream-validator";
+import path from "path";
+import { logAuditEvent } from "@/lib/audit";
 
 const jobSchema = z.object({
   boardId: z.string().uuid(),
@@ -70,6 +73,19 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       );
     }
 
+    // Resolve path and run bitstream validation
+    const resolvedPath = path.isAbsolute(bitstreamPath)
+      ? bitstreamPath
+      : path.join(process.cwd(), bitstreamPath);
+
+    const validation = validateBitstream(resolvedPath, bitstreamName, board.fpgaFamily);
+    if (!validation.valid) {
+      return NextResponse.json(
+        { error: validation.error || "Bitstream validation failed" },
+        { status: 400 }
+      );
+    }
+
     // Auto-end the user's current active session if they have one
     const userActiveSession = db
       .select()
@@ -96,8 +112,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       }
     }
 
-    // Prevent concurrent uploads/sessions to a board in use
-    const boardActiveSession = db
+    // Check if the board has an active session
+    let boardActiveSession = db
       .select()
       .from(hwSessions)
       .where(
@@ -108,17 +124,49 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       )
       .get();
 
-    if (
-      board.status === "busy" ||
-      board.status === "programming" ||
-      board.status === "allocated" ||
-      (boardActiveSession && (!userActiveSession || boardActiveSession.userId !== session.userId))
-    ) {
-      return NextResponse.json(
-        { error: "Board is currently in use by another session or programming job." },
-        { status: 409 }
-      );
+    // If there is an active session, check if it has expired
+    if (boardActiveSession) {
+      const isExpired = new Date(boardActiveSession.expiresAt) < new Date();
+      if (isExpired) {
+        // Dynamically clean up expired session
+        db.update(hwSessions)
+          .set({ status: "expired" })
+          .where(eq(hwSessions.id, boardActiveSession.id))
+          .run();
+        
+        db.update(boards)
+          .set({ status: "free", currentSessionId: null })
+          .where(eq(boards.id, boardId))
+          .run();
+
+        // Update local variables for downstream checks
+        board.status = "free";
+        boardActiveSession = undefined;
+      }
     }
+
+    const isAdmin = session.role === "admin";
+
+    // Prevent concurrent uploads/sessions to a board in use (unless requester is Admin or owns the active session)
+    if (!isAdmin) {
+      if (
+        board.status === "busy" ||
+        board.status === "programming" ||
+        board.status === "allocated" ||
+        (boardActiveSession && boardActiveSession.userId !== session.userId)
+      ) {
+        return NextResponse.json(
+          { error: "Board is currently in use by another session or programming job." },
+          { status: 409 }
+        );
+      }
+    }
+
+
+    // Role-based priority assignment
+    let priority = 0;
+    if (session.role === "admin") priority = 10;
+    else if (session.role === "researcher") priority = 5;
 
     // Create job (The JobQueue will automatically pick this up and process it)
     const jobId = uuid();
@@ -130,8 +178,18 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         bitstreamPath,
         bitstreamName,
         status: "queued",
+        priority,
       })
       .run();
+
+    logAuditEvent({
+      userId: session.userId,
+      action: "job_queued",
+      target: jobId,
+      ipAddress: req.headers.get("x-forwarded-for") || "127.0.0.1",
+      userAgent: req.headers.get("user-agent") || null,
+      metadata: { boardId, bitstreamName },
+    });
 
     return NextResponse.json(
       { id: jobId, status: "queued", message: "Job queued for programming" },

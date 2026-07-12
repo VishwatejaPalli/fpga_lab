@@ -24,6 +24,8 @@ export async function GET(
   return NextResponse.json({
     board: {
       ...board,
+      sshUsername: undefined,
+      sshPassword: undefined,
       capabilities: JSON.parse(board.capabilities || "[]"),
     },
   });

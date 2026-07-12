@@ -84,17 +84,18 @@ export default function MonitorPage() {
   }, [session?.expiresAt]);
 
   async function handleEndSession() {
-    if (!session) return;
-    try {
-      await fetch("/api/sessions", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: session.id }),
-      });
-      router.push("/dashboard");
-    } catch (err) {
-      console.error("Failed to end session:", err);
+    if (session) {
+      try {
+        await fetch("/api/sessions", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: session.id }),
+        });
+      } catch (err) {
+        console.error("Failed to end session:", err);
+      }
     }
+    router.push("/dashboard");
   }
 
   if (loading) {
@@ -261,7 +262,7 @@ export default function MonitorPage() {
                   <div className={`text-xl font-mono font-bold tracking-tight ${
                       timeRemaining === "Expired"
                         ? "text-danger"
-                        : parseInt(timeRemaining) < 5
+                        : (!timeRemaining.includes("m") || parseInt(timeRemaining) < 5)
                           ? "text-warning animate-pulse"
                           : "text-success"
                     }`}

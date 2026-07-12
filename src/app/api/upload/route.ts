@@ -62,18 +62,23 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
     // Save file
     const fileId = uuid();
-    const userDir = path.join(UPLOAD_DIR, session.userId);
-    const fileDir = path.join(userDir, fileId);
-    fs.mkdirSync(fileDir, { recursive: true });
+    
+    // Always store uploads relative to process.cwd() for consistent relative paths
+    const relativeDir = path.join("uploads", session.userId, fileId);
+    const absoluteDir = path.join(process.cwd(), relativeDir);
+    fs.mkdirSync(absoluteDir, { recursive: true });
 
-    const filePath = path.join(fileDir, file.name);
+    const safeName = path.basename(file.name).replace(/[^a-zA-Z0-9._-]/g, "_");
+    const absoluteFilePath = path.join(absoluteDir, safeName);
+    const relativeFilePath = path.join(relativeDir, safeName);
+    
     const buffer = Buffer.from(await file.arrayBuffer());
-    fs.writeFileSync(filePath, buffer);
+    fs.writeFileSync(absoluteFilePath, buffer);
 
     return NextResponse.json({
       fileId,
       fileName: file.name,
-      filePath,
+      filePath: relativeFilePath,
       size: file.size,
     });
 });

@@ -12,6 +12,7 @@
 import { eq } from "drizzle-orm";
 import db from "@/lib/db";
 import { boards } from "@/lib/db/schema";
+import { decryptSafe } from "@/lib/auth/crypto";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -86,9 +87,9 @@ const TELEMETRY_CMD = [
   // Overlay — try the PYNQ Python API, fall back gracefully
   "python3 -c \"from pynq import PL; print(PL.bitfile_name)\" 2>/dev/null || echo none",
   // CPU frequency (kHz)
-  "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null || echo 0",
-  // PL fabric clock (Hz) — try multiple sysfs paths
-  "cat /sys/class/fclk/fclk0/set_rate 2>/dev/null || cat /sys/kernel/debug/clk/fclk0/clk_rate 2>/dev/null || echo 0",
+  "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null || cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_cur_freq 2>/dev/null || grep -m1 'cpu MHz' /proc/cpuinfo 2>/dev/null | awk '{print $4 * 1000}' || echo 0",
+  // PL fabric clock (Hz) — try multiple sysfs paths and python api
+  "cat /sys/class/fclk/fclk0/set_rate 2>/dev/null || cat /sys/kernel/debug/clk/fclk0/clk_rate 2>/dev/null || python3 -c \"from pynq import Clocks; print(int(Clocks.fclk0_mhz * 1000000))\" 2>/dev/null || echo 0",
 ].join('; echo "|||"; ');
 
 // ─── Cache ─────────────────────────────────────────────────────────────────
@@ -314,7 +315,7 @@ export async function fetchPynqTelemetry(
 
   const host = board.ipAddress;
   const username = board.sshUsername || "xilinx";
-  const password = board.sshPassword || "xilinx";
+  const password = decryptSafe(board.sshPassword) || "xilinx";
 
   const raw = await sshExec(host, username, password, TELEMETRY_CMD);
   const telemetry = parseTelemetryOutput(raw);
@@ -362,7 +363,7 @@ export async function checkPynqOnline(boardId: string): Promise<boolean> {
         host: board.ipAddress!,
         port: 22,
         username: board.sshUsername || "xilinx",
-        password: board.sshPassword || "xilinx",
+        password: decryptSafe(board.sshPassword) || "xilinx",
         readyTimeout: 5000,
       });
     });

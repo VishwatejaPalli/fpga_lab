@@ -7,6 +7,7 @@ import { uartService } from "@/lib/hardware/uart";
 import { cameraService } from "@/lib/hardware/camera";
 import { sshService } from "@/lib/hardware/ssh";
 import fs from "fs";
+import path from "path";
 
 /**
  * Session Enforcer — periodically checks for expired hardware sessions
@@ -70,21 +71,21 @@ class SessionEnforcer {
       const maxAgeMs = 24 * 60 * 60 * 1000; // 24 hours
 
       for (const userId of users) {
-        const userDir = require("path").join(uploadDir, userId);
-        if (!fs.statSync(userDir).isDirectory()) continue;
+        const userDir = path.join(uploadDir, userId);
+        if (!fs.existsSync(userDir) || !fs.statSync(userDir).isDirectory()) continue;
 
         const files = fs.readdirSync(userDir);
         for (const file of files) {
-          const filePath = require("path").join(userDir, file);
+          const filePath = path.join(userDir, file);
           const stats = fs.statSync(filePath);
           
           if (stats.isDirectory()) {
              // Handle uuid folders from new upload route
              const innerFiles = fs.readdirSync(filePath);
              for(const innerFile of innerFiles) {
-                const innerPath = require("path").join(filePath, innerFile);
+                const innerPath = path.join(filePath, innerFile);
                 if (now - fs.statSync(innerPath).mtimeMs > maxAgeMs) {
-                   fs.unlinkSync(innerPath);
+                   fs.rmSync(innerPath, { recursive: true, force: true });
                 }
              }
              if (fs.readdirSync(filePath).length === 0) {
@@ -128,6 +129,7 @@ class SessionEnforcer {
         const blankPath = board.blankBitstreamPath || process.env.BLANK_BITSTREAM_PATH;
         const canBlank = blankPath && fs.existsSync(blankPath);
 
+        let resetSuccess = false;
         if (canBlank) {
           const programmer = new FPGAProgrammer();
           const result = await programmer.program({
@@ -135,30 +137,44 @@ class SessionEnforcer {
             bitstreamPath: blankPath,
             programmingTool: board.programmingTool || "openFPGALoader",
             devicePath: board.devicePath,
+            ipAddress: board.ipAddress,
             timeout: 120000,
           });
 
           if (!result.success) {
-            await resetBoard({
+            resetSuccess = await resetBoard({
               boardType: board.boardType,
               programmingTool: board.programmingTool || "openFPGALoader",
               devicePath: board.devicePath,
+              ipAddress: board.ipAddress,
             });
+          } else {
+            resetSuccess = true;
           }
         } else {
           // Fallback to reset if no blank bitstream is configured
-          await resetBoard({
+          resetSuccess = await resetBoard({
             boardType: board.boardType,
             programmingTool: board.programmingTool || "openFPGALoader",
             devicePath: board.devicePath,
+            ipAddress: board.ipAddress,
           });
         }
 
-        // Release board
-        db.update(boards)
-          .set({ status: "free", currentSessionId: null })
-          .where(eq(boards.id, board.id))
-          .run();
+        if (resetSuccess) {
+          // Release board
+          db.update(boards)
+            .set({ status: "free", currentSessionId: null })
+            .where(eq(boards.id, board.id))
+            .run();
+        } else {
+          // Reset failed, mark board as offline for admin intervention
+          console.error(`[Enforcer] Failed to reset board ${board.id}. Marking offline.`);
+          db.update(boards)
+            .set({ status: "offline", currentSessionId: null })
+            .where(eq(boards.id, board.id))
+            .run();
+        }
       }
 
       // Mark session complete

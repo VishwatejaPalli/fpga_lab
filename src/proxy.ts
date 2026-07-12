@@ -1,24 +1,69 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Note: We can't use jsonwebtoken in Edge proxy (native crypto not available).
-// Instead we do a lightweight JWT decode (base64) and verify structure.
-// Full verification happens in the API route handlers.
+// Verify signature using the Web Crypto API (supported in Edge/Next.js middleware)
+async function verifySignature(token: string, secret: string): Promise<boolean> {
+  const parts = token.split(".");
+  if (parts.length !== 3) return false;
+
+  const [header, payload, signature] = parts;
+  const message = `${header}.${payload}`;
+
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(secret);
+  const messageData = encoder.encode(message);
+
+  try {
+    const key = await crypto.subtle.importKey(
+      "raw",
+      keyData,
+      { name: "HMAC", hash: { name: "SHA-256" } },
+      false,
+      ["verify"]
+    );
+
+    // Decode base64url signature to Uint8Array
+    let base64 = signature.replace(/-/g, "+").replace(/_/g, "/");
+    while (base64.length % 4) base64 += "=";
+    const binary = atob(base64);
+    const sigBuf = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      sigBuf[i] = binary.charCodeAt(i);
+    }
+
+    return await crypto.subtle.verify(
+      "HMAC",
+      key,
+      sigBuf,
+      messageData
+    );
+  } catch (err) {
+    console.error("[Middleware] Web Crypto signature verification failed:", err);
+    return false;
+  }
+}
+
+// Native decode base64url payload to prevent node dependencies in Edge middleware
 function decodeJwtPayload(
   token: string
 ): { userId: string; role: string; exp: number } | null {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return null;
-    const payload = JSON.parse(
-      Buffer.from(parts[1], "base64url").toString("utf-8")
+    let base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    while (base64.length % 4) base64 += "=";
+    const jsonStr = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
     );
-    return payload;
+    return JSON.parse(jsonStr);
   } catch {
     return null;
   }
 }
 
-export function proxy(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Public paths — no auth required.
@@ -56,6 +101,19 @@ export function proxy(req: NextRequest) {
     }
     // Pages redirect to login.
     return NextResponse.redirect(new URL("/auth/login", req.url));
+  }
+
+  // Full signature verification check (Edge compatible)
+  const secret = process.env.JWT_SECRET || "dev-secret-change-me";
+  const isSignatureValid = await verifySignature(token, secret);
+
+  if (!isSignatureValid) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Invalid token signature" }, { status: 401 });
+    }
+    const response = NextResponse.redirect(new URL("/auth/login", req.url));
+    response.cookies.set("token", "", { maxAge: 0 });
+    return response;
   }
 
   // Decode JWT (lightweight check).

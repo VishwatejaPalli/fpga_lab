@@ -7,6 +7,16 @@ interface RateLimitStore {
 
 const store = new Map<string, RateLimitStore>();
 
+// Cleanup expired entries every 5 minutes to prevent memory leaks
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, record] of store.entries()) {
+    if (now > record.resetAt) {
+      store.delete(ip);
+    }
+  }
+}, 5 * 60 * 1000).unref();
+
 /**
  * Basic in-memory rate limiter.
  * In a real production environment with multiple nodes, use Redis.

@@ -13,6 +13,10 @@ export function runMigrations() {
       name TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'student',
       verified INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'active',
+      last_login TEXT,
+      token_version INTEGER NOT NULL DEFAULT 1,
+      locked_until TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -123,11 +127,56 @@ export function runMigrations() {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       completed_at TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS refresh_tokens (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      user_agent TEXT,
+      ip_address TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS login_attempts (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      ip_address TEXT NOT NULL,
+      count INTEGER NOT NULL DEFAULT 0,
+      reset_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+      action TEXT NOT NULL,
+      target TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   // Safe column adds for backwards compat
   const safeAlter = (sql: string) => {
-    try { sqlite.exec(sql); } catch { /* column already exists */ }
+    try { 
+      sqlite.exec(sql); 
+    } catch (err: any) { 
+      if (!err.message.includes("duplicate column name")) {
+        console.error(`[DB] Migration error on alter: ${err.message}`);
+        throw err;
+      }
+    }
   };
   safeAlter("ALTER TABLE jobs ADD COLUMN priority INTEGER NOT NULL DEFAULT 0");
   safeAlter("ALTER TABLE jobs ADD COLUMN batch_id TEXT");
@@ -137,6 +186,16 @@ export function runMigrations() {
   safeAlter("ALTER TABLE boards ADD COLUMN ip_address TEXT");
   safeAlter("ALTER TABLE boards ADD COLUMN ssh_username TEXT");
   safeAlter("ALTER TABLE boards ADD COLUMN ssh_password TEXT");
+  safeAlter("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'");
+  safeAlter("ALTER TABLE users ADD COLUMN last_login TEXT");
+  safeAlter("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 1");
+  safeAlter("ALTER TABLE users ADD COLUMN locked_until TEXT");
+
+  // Create missing indexes
+  sqlite.exec(`
+    CREATE INDEX IF NOT EXISTS jobs_status_idx ON jobs(status);
+    CREATE INDEX IF NOT EXISTS hw_sessions_status_idx ON hw_sessions(status);
+  `);
 
   console.log("[DB] Migrations complete");
 }

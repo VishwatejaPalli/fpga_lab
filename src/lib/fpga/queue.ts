@@ -1,5 +1,5 @@
 import { v4 as uuid } from "uuid";
-import { eq } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import db from "@/lib/db";
 import { jobs, boards, hwSessions } from "@/lib/db/schema";
 import { FPGAProgrammer } from "./programmer";
@@ -43,6 +43,7 @@ class JobQueue extends EventEmitter {
       .select()
       .from(jobs)
       .where(eq(jobs.status, "queued"))
+      .orderBy(desc(jobs.priority), jobs.createdAt)
       .all();
 
     for (const job of queuedJobs) {
@@ -58,16 +59,26 @@ class JobQueue extends EventEmitter {
 
       if (!board || board.status === "offline") continue;
 
-      if (board.status === "programming" || board.status === "allocated" || this.boardLocks.get(job.boardId)) {
-        // PREEMPTION: Kill the currently running programmer for this board
-        console.log(`[Queue] Preempting board ${job.boardId} for new job ${job.id}`);
-        const activeProg = this.activeProgrammers.get(job.boardId);
-        if (activeProg) {
-          activeProg.kill();
-          this.activeProgrammers.delete(job.boardId);
+      if (this.boardLocks.get(job.boardId) || board.status === "programming") {
+        // Board is currently being programmed. Wait.
+        continue;
+      }
+
+      if (board.status === "allocated" || board.status === "busy") {
+        // Only allow if the board is allocated to the user who submitted the job
+        const activeSession = db
+          .select()
+          .from(hwSessions)
+          .where(and(eq(hwSessions.boardId, job.boardId), eq(hwSessions.status, "active")))
+          .get();
+
+        if (activeSession && activeSession.userId === job.userId) {
+          // It's their board, allow reprogramming
+          console.log(`[Queue] User ${job.userId} reprogramming allocated board ${job.boardId}`);
+        } else {
+          // Allocated to someone else (or busy), wait
+          continue;
         }
-        // Force unlock so the new job can proceed
-        this.boardLocks.set(job.boardId, false);
       }
 
       // Lock board and start programming
@@ -117,6 +128,8 @@ class JobQueue extends EventEmitter {
         programmingTool: board.programmingTool || "openFPGALoader",
         devicePath: board.devicePath,
         ipAddress: board.ipAddress,
+        sshUsername: board.sshUsername,
+        sshPassword: board.sshPassword,
         timeout: 120000,
       });
 

@@ -60,12 +60,21 @@ export default function SshTerminal({ boardId, isFullscreen }: TerminalProps) {
         }));
       };
 
+      let sessionExpired = false;
+
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === "ssh-data") {
             // SSH PTY stream sends exact raw PTY output (carriage returns included usually)
             term.write(msg.data);
+          } else if (msg.type === "session-expired") {
+            sessionExpired = true;
+            term.write("\r\n\x1b[31m[SESSION EXPIRED / TERMINATED]\x1b[0m\r\n");
+            term.write("\x1b[90mRedirecting to dashboard...\x1b[0m\r\n");
+            setTimeout(() => {
+              window.location.href = "/dashboard";
+            }, 3000);
           }
         } catch {
           term.write(event.data);
@@ -73,6 +82,7 @@ export default function SshTerminal({ boardId, isFullscreen }: TerminalProps) {
       };
 
       ws.onclose = () => {
+        if (sessionExpired) return;
         term.write("\r\n\x1b[33m[Hardware not connected or SSH unavailable]\x1b[0m\r\n\r\n");
 
         const DEMO_SSH_LINES = [

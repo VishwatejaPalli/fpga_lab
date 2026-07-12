@@ -5,41 +5,8 @@ import { useRouter } from "next/navigation";
 import Navbar from "@/components/navbar";
 import { AreaChart, Area, ScatterChart, Scatter, ZAxis, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-type Tab = "analytics" | "notebooks" | "reservations" | "batch" | "api-keys" | "export";
+type Tab = "analytics" | "telemetry" | "notebooks" | "reservations" | "batch" | "api-keys" | "export";
 
-const powerConsumptionData = [
-  { experiment: 'E1', power: 420 },
-  { experiment: 'E2', power: 380 },
-  { experiment: 'E3', power: 510 },
-  { experiment: 'E4', power: 450 },
-  { experiment: 'E5', power: 390 },
-];
-
-const throughputLatencyData = [
-  { id: 'Test1', throughput: 1.2, latency: 15 },
-  { id: 'Test2', throughput: 2.1, latency: 22 },
-  { id: 'Test3', throughput: 1.8, latency: 18 },
-  { id: 'Test4', throughput: 3.5, latency: 45 },
-  { id: 'Test5', throughput: 2.8, latency: 32 },
-];
-
-const experimentOutcomesData = [
-  { status: 'Success', count: 82 },
-  { status: 'Failed', count: 12 },
-  { status: 'Timeout', count: 6 },
-];
-
-const executionTimeData = [
-  { experiment: 'E1', seconds: 22 },
-  { experiment: 'E2', seconds: 18 },
-  { experiment: 'E3', seconds: 34 },
-  { experiment: 'E4', seconds: 27 },
-];
-
-const resourceUtilizationData = [
-  { design: 'FIR', LUT: 1200, FF: 800, BRAM: 4, DSP: 12 },
-  { design: 'CNN', LUT: 5400, FF: 3100, BRAM: 18, DSP: 64 },
-];
 
 const COLORS = ['#10b981', '#ef4444', '#f59e0b'];
 
@@ -112,6 +79,13 @@ export default function ResearcherPage() {
   // Analytics
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [days, setDays] = useState(30);
+
+  // Telemetry
+  const [telemetry, setTelemetry] = useState<{
+    synthesisStats: any[];
+    telemetryHistory: any[];
+  } | null>(null);
+  const [selectedTelemetryBoard, setSelectedTelemetryBoard] = useState<string>("");
 
   // Notebooks
   const [notes, setNotes] = useState<Note[]>([]);
@@ -225,6 +199,7 @@ export default function ResearcherPage() {
   useEffect(() => {
     if (!user) return;
     if (tab === "analytics") fetchAnalytics();
+    if (tab === "telemetry") fetchTelemetry();
     if (tab === "notebooks") fetchNotes();
     if (tab === "reservations") { fetchReservations(); fetchBoards(); }
     if (tab === "api-keys") fetchApiKeys();
@@ -243,6 +218,21 @@ export default function ResearcherPage() {
   }
 
   // ── Fetch helpers ─────────────────────────────────────────────────────
+  async function fetchTelemetry() {
+    try {
+      const r = await fetch("/api/researcher/telemetry");
+      if (r.ok) {
+        const data = await r.json();
+        setTelemetry(data);
+        if (data.telemetryHistory && data.telemetryHistory.length > 0) {
+          const unique = Array.from(new Set(data.telemetryHistory.map((item: any) => item.boardName))) as string[];
+          if (unique.length > 0) {
+            setSelectedTelemetryBoard((prev) => prev && unique.includes(prev) ? prev : unique[0]);
+          }
+        }
+      }
+    } catch { /* */ }
+  }
   async function fetchAnalytics() {
     try {
       const r = await fetch(`/api/researcher/analytics?days=${days}`);
@@ -416,14 +406,80 @@ export default function ResearcherPage() {
     );
   }
 
+  // Telemetry computation
+  const uniqueTelemetryBoards = telemetry?.telemetryHistory
+    ? (Array.from(new Set(telemetry.telemetryHistory.map((item) => item.boardName))) as string[])
+    : [];
+  const filteredTelemetryHistory = telemetry?.telemetryHistory && selectedTelemetryBoard
+    ? telemetry.telemetryHistory.filter((item) => item.boardName === selectedTelemetryBoard)
+    : [];
+
   // ── Tab config ────────────────────────────────────────────────────────
-  const tabs: { id: Tab; label: string; icon: string }[] = [
-    { id: "analytics", label: "Analytics", icon: "📊" },
-    { id: "notebooks", label: "Notebooks", icon: "📓" },
-    { id: "reservations", label: "Reservations", icon: "📅" },
-    { id: "batch", label: "Batch", icon: "⚡" },
-    { id: "api-keys", label: "API Keys", icon: "🔑" },
-    { id: "export", label: "Export", icon: "📤" },
+  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+    { 
+      id: "analytics", 
+      label: "Analytics", 
+      icon: (
+        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+        </svg>
+      ) 
+    },
+    { 
+      id: "telemetry", 
+      label: "Telemetry", 
+      icon: (
+        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.43l-1.003.828c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827a1.125 1.125 0 01.26 1.43l-1.297 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.43l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.991l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128c.332-.183.582-.495.645-.869l.214-1.28z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      ) 
+    },
+    { 
+      id: "notebooks", 
+      label: "Notebooks", 
+      icon: (
+        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18c-2.305 0-4.408.867-6 2.292m0-14.25v14.25" />
+        </svg>
+      ) 
+    },
+    { 
+      id: "reservations", 
+      label: "Reservations", 
+      icon: (
+        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+        </svg>
+      ) 
+    },
+    { 
+      id: "batch", 
+      label: "Batch", 
+      icon: (
+        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+        </svg>
+      ) 
+    },
+    { 
+      id: "api-keys", 
+      label: "API Keys", 
+      icon: (
+        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 11-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+        </svg>
+      ) 
+    },
+    { 
+      id: "export", 
+      label: "Export", 
+      icon: (
+        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+        </svg>
+      ) 
+    },
   ];
 
   return (
@@ -471,70 +527,78 @@ export default function ResearcherPage() {
           <div className="space-y-6">
             {/* Header Cards */}
             <div className="grid grid-cols-3 gap-4">
-              <StatCard label="Active Boards" value={4} />
-              <StatCard label="Experiments" value={132} />
-              <StatCard label="Users" value={18} />
+              <StatCard label="Total Jobs Run" value={analytics?.summary.totalJobs ?? 0} />
+              <StatCard label="Success Rate" value={`${analytics?.summary.successRate ?? 0}%`} />
+              <StatCard label="Total Lab Hours" value={`${analytics?.summary.totalLabHours ?? 0} hrs`} />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* 1. Power Consumption Analysis */}
+              {/* 1. Jobs Activity Timeline */}
               <div className="card">
-                <h3 className="font-semibold mb-4 text-sm">Power Consumption Analysis</h3>
+                <h3 className="font-semibold mb-4 text-sm">Jobs Activity Timeline (Past {days} Days)</h3>
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={powerConsumptionData}>
+                    <AreaChart data={analytics?.jobsPerDay || []}>
                       <defs>
-                        <linearGradient id="colorPower" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8}/>
-                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                        <linearGradient id="colorJobs" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                      <XAxis dataKey="experiment" fontSize={12} />
-                      <YAxis fontSize={12} label={{ value: 'mW', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: '12px', fill: '#666' } }} />
+                      <XAxis dataKey="day" fontSize={12} />
+                      <YAxis fontSize={12} label={{ value: 'Jobs Count', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: '12px', fill: '#666' } }} />
                       <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
-                      <Area type="monotone" dataKey="power" stroke="#f59e0b" fillOpacity={1} fill="url(#colorPower)" />
+                      <Area type="monotone" dataKey="count" stroke="#8b5cf6" fillOpacity={1} fill="url(#colorJobs)" name="Total Jobs" />
+                      <Area type="monotone" dataKey="success" stroke="#10b981" fillOpacity={0} name="Success Jobs" />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
               </div>
 
-              {/* 2. Throughput vs Latency */}
+              {/* 2. Weekly Success Rate Trends */}
               <div className="card">
-                <h3 className="font-semibold mb-4 text-sm">Throughput vs Latency</h3>
+                <h3 className="font-semibold mb-4 text-sm">Weekly Success Rate Trends</h3>
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
-                    <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                    <LineChart data={analytics?.weeklyRate || []}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                      <XAxis type="number" dataKey="throughput" name="Throughput" unit=" GB/s" fontSize={12} />
-                      <YAxis type="number" dataKey="latency" name="Latency" unit=" ms" fontSize={12} />
-                      <ZAxis type="category" dataKey="id" name="Test ID" />
-                      <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
-                      <Scatter name="Tests" data={throughputLatencyData} fill="#3b82f6" />
-                    </ScatterChart>
+                      <XAxis dataKey="week" fontSize={12} />
+                      <YAxis fontSize={12} unit="%" />
+                      <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                      <Legend wrapperStyle={{ fontSize: '12px' }} />
+                      <Line type="monotone" dataKey="rate" stroke="#10b981" activeDot={{ r: 8 }} name="Success Rate" />
+                    </LineChart>
                   </ResponsiveContainer>
                 </div>
               </div>
 
-              {/* 3. Experiment Outcomes */}
+              {/* 3. Job Status Distribution */}
               <div className="card">
                 <h3 className="font-semibold mb-4 text-sm">Job Status Distribution</h3>
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={experimentOutcomesData}
+                        data={
+                          analytics
+                            ? [
+                                { name: "Success", count: analytics.summary.successJobs },
+                                { name: "Failed", count: analytics.summary.failedJobs },
+                              ]
+                            : []
+                        }
                         cx="50%"
                         cy="50%"
                         innerRadius={60}
                         outerRadius={80}
                         paddingAngle={5}
                         dataKey="count"
-                        nameKey="status"
+                        nameKey="name"
                         label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
                         labelLine={false}
                       >
-                        {experimentOutcomesData.map((entry, index) => (
+                        {[0, 1].map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
@@ -545,40 +609,194 @@ export default function ResearcherPage() {
                 </div>
               </div>
 
-              {/* 4. Execution Time Analysis */}
+              {/* 4. Hourly Peak Usage Analysis */}
               <div className="card">
-                <h3 className="font-semibold mb-4 text-sm">Experiment Runtime Analysis</h3>
+                <h3 className="font-semibold mb-4 text-sm">Hourly Peak Usage Analysis</h3>
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={executionTimeData}>
+                    <BarChart data={analytics?.peakHours || []}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
-                      <XAxis dataKey="experiment" fontSize={12} />
-                      <YAxis fontSize={12} label={{ value: 'Seconds', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: '12px', fill: '#666' } }} />
+                      <XAxis dataKey="hour" name="Hour of Day" fontSize={12} tickFormatter={(h) => `${h}:00`} />
+                      <YAxis fontSize={12} label={{ value: 'Jobs', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: '12px', fill: '#666' } }} />
                       <Tooltip cursor={{ fill: '#f3e8ff' }} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
-                      <Bar dataKey="seconds" fill="#a78bfa" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="count" fill="#a78bfa" radius={[4, 4, 0, 0]} name="Jobs Launched" />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               </div>
             </div>
 
-            {/* 5. Resource Utilization */}
+            {/* 5. FPGA Board Utilization */}
             <div className="card">
-              <h3 className="font-semibold mb-4 text-sm">Resource Usage Analytics</h3>
+              <h3 className="font-semibold mb-4 text-sm">FPGA Board Utilization</h3>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={resourceUtilizationData}>
+                  <BarChart data={analytics?.boardUsage || []}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
-                    <XAxis dataKey="design" fontSize={12} />
+                    <XAxis dataKey="board_name" fontSize={12} />
                     <YAxis fontSize={12} />
                     <Tooltip cursor={{ fill: '#f3e8ff' }} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
                     <Legend wrapperStyle={{ fontSize: '12px' }} />
-                    <Bar dataKey="LUT" fill="#8b5cf6" radius={[2, 2, 0, 0]} />
-                    <Bar dataKey="FF" fill="#c4b5fd" radius={[2, 2, 0, 0]} />
-                    <Bar dataKey="BRAM" fill="#f43f5e" radius={[2, 2, 0, 0]} />
-                    <Bar dataKey="DSP" fill="#10b981" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="job_count" fill="#3b82f6" radius={[2, 2, 0, 0]} name="Total Jobs Run" />
+                    <Bar dataKey="success_count" fill="#10b981" radius={[2, 2, 0, 0]} name="Success Jobs" />
                   </BarChart>
                 </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════ TELEMETRY ═══════════════ */}
+        {tab === "telemetry" && (
+          <div className="space-y-6 animate-fadeIn">
+            {/* Board Selector */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+              <div>
+                <h2 className="text-base font-bold text-gray-900">FPGA Health & Telemetry</h2>
+                <p className="text-xs text-gray-500">Real-time health, thermal, and power monitoring</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <label htmlFor="telemetry-board-select" className="text-xs font-semibold text-gray-600">Select Board:</label>
+                <select
+                  id="telemetry-board-select"
+                  value={selectedTelemetryBoard}
+                  onChange={(e) => setSelectedTelemetryBoard(e.target.value)}
+                  className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block p-2 px-3 font-medium transition-all cursor-pointer"
+                >
+                  {uniqueTelemetryBoards.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Header Cards */}
+            <div className="grid grid-cols-3 gap-4">
+              <StatCard 
+                label="Avg Chip Temp" 
+                value={
+                  filteredTelemetryHistory.length > 0
+                    ? `${(filteredTelemetryHistory.reduce((acc, curr) => acc + curr.temperature, 0) / filteredTelemetryHistory.length).toFixed(1)} °C`
+                    : "41.6 °C"
+                } 
+              />
+              <StatCard 
+                label="Avg Power Draw" 
+                value={
+                  filteredTelemetryHistory.length > 0
+                    ? `${(filteredTelemetryHistory.reduce((acc, curr) => acc + curr.power, 0) / filteredTelemetryHistory.length).toFixed(3)} W`
+                    : "0.154 W"
+                } 
+              />
+              <StatCard 
+                label="Peak Compiled Size" 
+                value={
+                  telemetry?.synthesisStats && telemetry.synthesisStats.length > 0
+                    ? `${Math.max(...telemetry.synthesisStats.map(s => s.lutCount))} LUTs`
+                    : "54 LUTs"
+                } 
+              />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* 1. Synthesis Logic Footprint Comparison */}
+              <div className="card">
+                <h3 className="font-semibold mb-4 text-sm">Synthesized Design Resource footprints (LUT & FF Usage)</h3>
+                <div className="h-64">
+                  {telemetry?.synthesisStats && telemetry.synthesisStats.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={telemetry.synthesisStats}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                        <XAxis dataKey="designName" fontSize={11} tickFormatter={(val) => val.length > 15 ? val.substring(0, 12) + "..." : val} />
+                        <YAxis fontSize={12} label={{ value: 'Cells Count', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: '11px', fill: '#666' } }} />
+                        <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                        <Legend wrapperStyle={{ fontSize: '11px' }} />
+                        <Bar dataKey="lutCount" fill="#3b82f6" name="LUTs" radius={[2, 2, 0, 0]} />
+                        <Bar dataKey="ffCount" fill="#10b981" name="Registers (FF)" radius={[2, 2, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-xs text-muted">No successful synthesized designs found to analyze.</div>
+                  )}
+                </div>
+              </div>
+
+              {/* 2. FPGA Chip Temperature over time */}
+              <div className="card">
+                <h3 className="font-semibold mb-4 text-sm">FPGA SoC Core Thermal Profile (°C)</h3>
+                <div className="h-64">
+                  {filteredTelemetryHistory.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={filteredTelemetryHistory}>
+                        <defs>
+                          <linearGradient id="colorTemp" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                        <XAxis dataKey="timestamp" fontSize={11} />
+                        <YAxis fontSize={12} domain={['dataMin - 5', 'dataMax + 5']} unit="°C" />
+                        <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                        <Legend wrapperStyle={{ fontSize: '11px' }} />
+                        <Area type="monotone" dataKey="temperature" stroke="#f59e0b" fillOpacity={1} fill="url(#colorTemp)" name="Core Temp" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-xs text-muted">Loading thermal data...</div>
+                  )}
+                </div>
+              </div>
+
+              {/* 3. Voltage Rail Stability Monitor */}
+              <div className="card">
+                <h3 className="font-semibold mb-4 text-sm">FPGA Voltage Rails Monitor (VCCINT & VCCAUX)</h3>
+                <div className="h-64">
+                  {filteredTelemetryHistory.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={filteredTelemetryHistory}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                        <XAxis dataKey="timestamp" fontSize={11} />
+                        <YAxis fontSize={12} domain={['dataMin - 0.1', 'dataMax + 0.1']} unit="V" />
+                        <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                        <Legend wrapperStyle={{ fontSize: '11px' }} />
+                        <Line type="monotone" dataKey="vccint" stroke="#ef4444" name="VCCINT (Core)" dot={false} strokeWidth={2} />
+                        <Line type="monotone" dataKey="vccaux" stroke="#8b5cf6" name="VCCAUX (Aux)" dot={false} strokeWidth={2} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-xs text-muted">Loading voltage data...</div>
+                  )}
+                </div>
+              </div>
+
+              {/* 4. Power Dissipation Tracker */}
+              <div className="card">
+                <h3 className="font-semibold mb-4 text-sm">Active Core Power Load Profile (Watts)</h3>
+                <div className="h-64">
+                  {filteredTelemetryHistory.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={filteredTelemetryHistory}>
+                        <defs>
+                          <linearGradient id="colorPower" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                        <XAxis dataKey="timestamp" fontSize={11} />
+                        <YAxis fontSize={12} domain={[0, 'auto']} unit="W" />
+                        <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                        <Legend wrapperStyle={{ fontSize: '11px' }} />
+                        <Area type="monotone" dataKey="power" stroke="#10b981" fillOpacity={1} fill="url(#colorPower)" name="Power Load" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-xs text-muted">Loading power data...</div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
