@@ -16,7 +16,7 @@ export async function GET(
 
   const { id } = await params;
 
-  const board = db.select().from(boards).where(eq(boards.id, id)).get();
+  const [board] = await db.select().from(boards).where(eq(boards.id, id));
 
   if (!board) {
     return NextResponse.json({ error: "Board not found" }, { status: 404 });
@@ -29,7 +29,7 @@ export async function GET(
       }
 
       // Check if board already has an active session
-      const activeSessionForBoard = db
+      const [activeSessionForBoard] = await db
         .select()
         .from(hwSessions)
         .where(
@@ -37,8 +37,7 @@ export async function GET(
             eq(hwSessions.boardId, id),
             eq(hwSessions.status, "active")
           )
-        )
-        .get();
+        );
 
       if (activeSessionForBoard) {
         if (activeSessionForBoard.userId !== session.userId) {
@@ -53,7 +52,7 @@ export async function GET(
         }
 
         // Auto-end the user's current active session if they have one elsewhere
-        const userActiveSession = db
+        const [userActiveSession] = await db
           .select()
           .from(hwSessions)
           .where(
@@ -61,39 +60,34 @@ export async function GET(
               eq(hwSessions.userId, session.userId),
               eq(hwSessions.status, "active")
             )
-          )
-          .get();
+          );
 
         if (userActiveSession) {
-          db.update(hwSessions)
+          await db.update(hwSessions)
             .set({ status: "ended" })
-            .where(eq(hwSessions.id, userActiveSession.id))
-            .run();
+            .where(eq(hwSessions.id, userActiveSession.id));
 
-          db.update(boards)
+          await db.update(boards)
             .set({ status: "free", currentSessionId: null })
-            .where(eq(boards.id, userActiveSession.boardId))
-            .run();
+            .where(eq(boards.id, userActiveSession.boardId));
         }
 
         // Create new active session for this board
         const newSessionId = randomUUID();
         const expiresAt = new Date(Date.now() + (board.sessionTimeoutMinutes || 30) * 60 * 1000).toISOString();
 
-        db.insert(hwSessions)
+        await db.insert(hwSessions)
           .values({
             id: newSessionId,
             userId: session.userId,
             boardId: id,
             status: "active",
             expiresAt,
-          })
-          .run();
+          });
 
-        db.update(boards)
+        await db.update(boards)
           .set({ status: "busy", currentSessionId: newSessionId })
-          .where(eq(boards.id, id))
-          .run();
+          .where(eq(boards.id, id));
       }
 
       const proxyUrl = `/pynq-proxy/${id}/tree`;

@@ -28,11 +28,10 @@ class UARTService extends EventEmitter {
       return;
     }
 
-    const board = db
+    const [board] = await db
       .select()
       .from(boards)
-      .where(eq(boards.id, boardId))
-      .get();
+      .where(eq(boards.id, boardId));
 
     if (!board || !board.serialPort) {
       console.warn(`[UART] Serial port not configured/found for board ${boardId}`);

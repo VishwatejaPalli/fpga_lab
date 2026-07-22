@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/navbar";
+import ConfirmModal from "@/components/confirm-modal";
 import { AreaChart, Area, ScatterChart, Scatter, ZAxis, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 type Tab = "analytics" | "telemetry" | "notebooks" | "reservations" | "batch" | "api-keys" | "export";
@@ -141,6 +142,19 @@ export default function ResearcherPage() {
 
   // Flash message
   const [msg, setMsg] = useState({ text: "", ok: true });
+
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  });
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -335,10 +349,18 @@ export default function ResearcherPage() {
     setNoteForm({ title: "", content: "", tags: "" });
   }
 
-  async function deleteNote(id: string) {
-    if (!confirm("Delete this note?")) return;
-    await fetch(`/api/researcher/notebooks?id=${id}`, { method: "DELETE" });
-    fetchNotes();
+  function deleteNote(id: string) {
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Note",
+      message: "Are you sure you want to delete this notebook entry?",
+      confirmText: "Delete Note",
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        await fetch(`/api/researcher/notebooks?id=${id}`, { method: "DELETE" });
+        fetchNotes();
+      },
+    });
   }
 
   async function togglePin(note: Note) {
@@ -361,10 +383,18 @@ export default function ResearcherPage() {
     else { const j = await r.json(); flash(j.error || "Failed", false); }
   }
 
-  async function cancelReservation(id: string) {
-    if (!confirm("Cancel reservation?")) return;
-    await fetch(`/api/researcher/reservations?id=${id}`, { method: "DELETE" });
-    fetchReservations();
+  function cancelReservation(id: string) {
+    setConfirmModal({
+      isOpen: true,
+      title: "Cancel Reservation",
+      message: "Are you sure you want to cancel this reservation?",
+      confirmText: "Cancel Reservation",
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        await fetch(`/api/researcher/reservations?id=${id}`, { method: "DELETE" });
+        fetchReservations();
+      },
+    });
   }
 
   // ── API Keys ──────────────────────────────────────────────────────────
@@ -383,10 +413,18 @@ export default function ResearcherPage() {
     } else { const j = await r.json(); flash(j.error || "Failed", false); }
   }
 
-  async function deleteApiKey(id: string) {
-    if (!confirm("Revoke this API key?")) return;
-    await fetch(`/api/researcher/api-keys?id=${id}`, { method: "DELETE" });
-    fetchApiKeys();
+  function deleteApiKey(id: string) {
+    setConfirmModal({
+      isOpen: true,
+      title: "Revoke API Key",
+      message: "Are you sure you want to revoke this API key? External systems using it will lose access immediately.",
+      confirmText: "Revoke Key",
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        await fetch(`/api/researcher/api-keys?id=${id}`, { method: "DELETE" });
+        fetchApiKeys();
+      },
+    });
   }
 
   // ── Export ────────────────────────────────────────────────────────────
@@ -1422,6 +1460,15 @@ export default function ResearcherPage() {
           </div>
         )}
       </main>
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        onConfirm={confirmModal.onConfirm}
+        onClose={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

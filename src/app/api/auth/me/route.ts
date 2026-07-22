@@ -10,7 +10,7 @@ export async function GET() {
     return NextResponse.json({ user: null }, { status: 401 });
   }
 
-  const user = db
+  const [user] = await db
     .select({
       id: users.id,
       email: users.email,
@@ -18,8 +18,7 @@ export async function GET() {
       role: users.role,
     })
     .from(users)
-    .where(eq(users.id, session.userId))
-    .get();
+    .where(eq(users.id, session.userId));
 
   if (!user) {
     return NextResponse.json({ user: null }, { status: 401 });

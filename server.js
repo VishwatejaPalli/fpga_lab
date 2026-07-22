@@ -15,16 +15,13 @@ const next = require("next");
 const { WebSocketServer, WebSocket } = require("ws");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
-const Database = require("better-sqlite3");
+const { Pool } = require("pg");
 const path = require("path");
 
-const dbPath = process.env.DB_PATH || path.join(__dirname, "data", "fpga_lab.db");
-let db;
-try {
-  db = new Database(dbPath);
-} catch (e) {
-  console.error("Could not open SQLite database in server.js:", e.message);
-}
+const connectionString = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/fpga_lab";
+const pool = new Pool({
+  connectionString,
+});
 
 function parseCookies(cookieHeader) {
   if (!cookieHeader) return {};
@@ -54,24 +51,24 @@ function authenticateRequest(req) {
   }
 }
 
-function verifyUserSession(userId, boardId) {
-  if (!db) return false;
+async function verifyUserSession(userId, boardId) {
   try {
-    const session = db.prepare(
-      "SELECT id FROM hw_sessions WHERE board_id = ? AND user_id = ? AND status = 'active'"
-    ).get(boardId, userId);
-    return !!session;
+    const res = await pool.query(
+      "SELECT id FROM hw_sessions WHERE board_id = $1 AND user_id = $2 AND status = 'active'",
+      [boardId, userId]
+    );
+    return res.rows.length > 0;
   } catch (err) {
     console.error("Error verifying user session:", err.message);
     return false;
   }
 }
 
-function verifyUserJob(user, jobId) {
-  if (!db) return false;
+async function verifyUserJob(user, jobId) {
   try {
     if (user.role === "admin" || user.role === "researcher") return true;
-    const job = db.prepare("SELECT user_id FROM jobs WHERE id = ?").get(jobId);
+    const res = await pool.query("SELECT user_id FROM jobs WHERE id = $1", [jobId]);
+    const job = res.rows[0];
     return job && job.user_id === user.userId;
   } catch (err) {
     console.error("Error verifying user job:", err.message);
@@ -79,10 +76,10 @@ function verifyUserJob(user, jobId) {
   }
 }
 
-function getBoardIp(boardId) {
-  if (!db) return null;
+async function getBoardIp(boardId) {
   try {
-    const board = db.prepare("SELECT ip_address FROM boards WHERE id = ?").get(boardId);
+    const res = await pool.query("SELECT ip_address FROM boards WHERE id = $1", [boardId]);
+    const board = res.rows[0];
     return board ? board.ip_address : null;
   } catch (err) {
     console.error("Error getting board IP:", err.message);
@@ -110,29 +107,29 @@ const JUPYTER_PATHS = [
 function shouldProxyHttp(req) {
   const { pathname } = parse(req.url, true);
   if (!pathname) return false;
-  
+
   if (pathname.startsWith("/pynq-proxy/")) {
     return true;
   }
-  
+
   const cookies = parseCookies(req.headers.cookie);
   const boardId = cookies.pynq_board_id;
   if (!boardId) return false;
-  
+
   return JUPYTER_PATHS.some(p => pathname.startsWith(p));
 }
 
-function handleProxyHttp(req, res) {
+async function handleProxyHttp(req, res) {
   const user = authenticateRequest(req);
   if (!user) {
     res.writeHead(401, { "Content-Type": "text/plain" });
     res.end("Unauthorized");
     return;
   }
-  
+
   let boardId = null;
   let targetPath = "";
-  
+
   const { pathname } = parse(req.url, true);
   if (pathname.startsWith("/pynq-proxy/")) {
     const match = req.url.match(/^\/pynq-proxy\/([^\/?#]+)(.*)$/);
@@ -145,23 +142,23 @@ function handleProxyHttp(req, res) {
     boardId = cookies.pynq_board_id;
     targetPath = req.url;
   }
-  
-  if (!boardId || !verifyUserSession(user.userId, boardId)) {
+
+  if (!boardId || !(await verifyUserSession(user.userId, boardId))) {
     res.writeHead(403, { "Content-Type": "text/plain" });
     res.end("Forbidden - Active session required");
     return;
   }
-  
-  const ip = getBoardIp(boardId);
+
+  const ip = await getBoardIp(boardId);
   if (!ip) {
     res.writeHead(502, { "Content-Type": "text/plain" });
     res.end("Bad Gateway - Board offline");
     return;
   }
-  
+
   const headers = { ...req.headers };
   delete headers.host;
-  
+
   const proxyReq = http.request({
     host: ip,
     port: 9090,
@@ -178,13 +175,13 @@ function handleProxyHttp(req, res) {
     res.writeHead(proxyRes.statusCode, proxyRes.headers);
     proxyRes.pipe(res);
   });
-  
+
   proxyReq.on("error", (err) => {
     console.error("[Proxy HTTP Error]:", err.message);
     res.writeHead(502, { "Content-Type": "text/plain" });
     res.end("Bad Gateway - Jupyter unreachable");
   });
-  
+
   req.pipe(proxyReq);
 }
 
@@ -196,10 +193,10 @@ const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
-  const server = createServer((req, res) => {
+  const server = createServer(async (req, res) => {
     const parsedUrl = parse(req.url, true);
     if (shouldProxyHttp(req)) {
-      handleProxyHttp(req, res);
+      await handleProxyHttp(req, res);
     } else {
       handle(req, res, parsedUrl);
     }
@@ -213,10 +210,10 @@ app.prepare().then(() => {
       activeSockets.set(boardId, new Set());
     }
     activeSockets.get(boardId).add(ws);
-    
+
     ws.isAlive = true;
     ws.on("pong", () => { ws.isAlive = true; });
-    
+
     ws.on("close", () => {
       const sockets = activeSockets.get(boardId);
       if (sockets) {
@@ -229,14 +226,15 @@ app.prepare().then(() => {
   }
 
   // Periodic session checker (every 5 seconds) to disconnect inactive sessions
-  const sessionCheckInterval = setInterval(() => {
-    if (!db) return;
+  const sessionCheckInterval = setInterval(async () => {
     try {
       for (const boardId of activeSockets.keys()) {
-        const session = db.prepare(
-          "SELECT id FROM hw_sessions WHERE board_id = ? AND status = 'active'"
-        ).get(boardId);
-        
+        const res = await pool.query(
+          "SELECT id FROM hw_sessions WHERE board_id = $1 AND status = 'active'",
+          [boardId]
+        );
+        const session = res.rows[0];
+
         if (!session) {
           const sockets = activeSockets.get(boardId);
           if (sockets && sockets.size > 0) {
@@ -245,7 +243,7 @@ app.prepare().then(() => {
               try {
                 ws.send(JSON.stringify({ type: "session-expired", message: "Session expired or ended." }));
                 ws.close();
-              } catch (e) {}
+              } catch (e) { }
               sockets.delete(ws);
             }
           }
@@ -264,23 +262,23 @@ app.prepare().then(() => {
   const sshWss = new WebSocketServer({ noServer: true });
 
   // Route WebSocket upgrades by path
-  server.on("upgrade", (req, socket, head) => {
+  server.on("upgrade", async (req, socket, head) => {
     const { pathname } = parse(req.url, true);
 
     // Parse cookies manually
     const cookies = req.headers.cookie
       ? req.headers.cookie.split(";").reduce((res, c) => {
-          const [key, val] = c.trim().split("=").map(decodeURIComponent);
-          try {
-            return Object.assign(res, { [key]: JSON.parse(val) });
-          } catch (e) {
-            return Object.assign(res, { [key]: val });
-          }
-        }, {})
+        const [key, val] = c.trim().split("=").map(decodeURIComponent);
+        try {
+          return Object.assign(res, { [key]: JSON.parse(val) });
+        } catch (e) {
+          return Object.assign(res, { [key]: val });
+        }
+      }, {})
       : {};
 
     const token = cookies.token;
-    
+
     // Basic JWT verification (API key verification skipped here for brevity, 
     // but JWT secures the web UI clients)
     let user = null;
@@ -326,13 +324,13 @@ app.prepare().then(() => {
     }
 
     if (isJupyterWs && targetBoardId) {
-      if (!verifyUserSession(user.userId, targetBoardId)) {
+      if (!(await verifyUserSession(user.userId, targetBoardId))) {
         socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
         socket.destroy();
         return;
       }
 
-      const ip = getBoardIp(targetBoardId);
+      const ip = await getBoardIp(targetBoardId);
       if (!ip) {
         socket.write("HTTP/1.1 502 Bad Gateway\r\n\r\n");
         socket.destroy();
@@ -380,7 +378,7 @@ app.prepare().then(() => {
 
     if (pathname && pathname.startsWith("/ws/uart/")) {
       const boardId = pathname.split("/ws/uart/")[1];
-      if (!verifyUserSession(user.userId, boardId)) {
+      if (!(await verifyUserSession(user.userId, boardId))) {
         socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
         socket.destroy();
         return;
@@ -390,7 +388,7 @@ app.prepare().then(() => {
       });
     } else if (pathname && pathname.startsWith("/ws/logs/")) {
       const jobId = pathname.split("/ws/logs/")[1];
-      if (!verifyUserJob(user, jobId)) {
+      if (!(await verifyUserJob(user, jobId))) {
         socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
         socket.destroy();
         return;
@@ -400,7 +398,7 @@ app.prepare().then(() => {
       });
     } else if (pathname && pathname.startsWith("/ws/camera/")) {
       const boardId = pathname.split("/ws/camera/")[1];
-      if (!verifyUserSession(user.userId, boardId)) {
+      if (!(await verifyUserSession(user.userId, boardId))) {
         socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
         socket.destroy();
         return;
@@ -410,7 +408,7 @@ app.prepare().then(() => {
       });
     } else if (pathname && pathname.startsWith("/ws/ssh/")) {
       const boardId = pathname.split("/ws/ssh/")[1];
-      if (!verifyUserSession(user.userId, boardId)) {
+      if (!(await verifyUserSession(user.userId, boardId))) {
         socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
         socket.destroy();
         return;
@@ -604,7 +602,7 @@ app.prepare().then(() => {
   const gracefulShutdown = () => {
     console.log("\n[Server] Shutting down gracefully...");
     clearInterval(sessionCheckInterval);
-    
+
     // Clean up ffmpeg processes
     if (globalThis.__cameraService) {
       try {

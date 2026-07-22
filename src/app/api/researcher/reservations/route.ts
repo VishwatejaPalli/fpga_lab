@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
 
   let rows;
   if (scope === "all") {
-    rows = sqlite
+    rows = await sqlite
       .prepare(
         `SELECT r.*, b.name as board_name, u.name as user_name
          FROM board_reservations r
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
       )
       .all();
   } else {
-    rows = sqlite
+    rows = await sqlite
       .prepare(
         `SELECT r.*, b.name as board_name
          FROM board_reservations r
@@ -70,11 +70,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Max 4 hours per reservation" }, { status: 400 });
 
   // Check board exists
-  const board = sqlite.prepare("SELECT id FROM boards WHERE id = ?").get(boardId);
+  const board = await sqlite.prepare("SELECT id FROM boards WHERE id = ?").get(boardId);
   if (!board) return NextResponse.json({ error: "Board not found" }, { status: 404 });
 
   // Check overlap
-  const conflict = sqlite
+  const conflict = await sqlite
     .prepare(
       `SELECT id FROM board_reservations
        WHERE board_id = ? AND status = 'confirmed'
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Time slot conflicts with existing reservation" }, { status: 409 });
 
   // Max 5 active reservations
-  const countRow = sqlite
+  const countRow = await sqlite
     .prepare(
       "SELECT COUNT(*) as c FROM board_reservations WHERE user_id = ? AND status = 'confirmed' AND ends_at > datetime('now')"
     )
@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Maximum 5 active reservations" }, { status: 400 });
 
   const id = uuid();
-  sqlite
+  await sqlite
     .prepare(
       `INSERT INTO board_reservations (id, user_id, board_id, starts_at, ends_at, purpose)
        VALUES (?, ?, ?, ?, ?, ?)`
@@ -114,7 +114,7 @@ export async function DELETE(req: NextRequest) {
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "Reservation ID required" }, { status: 400 });
 
-  sqlite
+  await sqlite
     .prepare("UPDATE board_reservations SET status = 'cancelled' WHERE id = ? AND user_id = ?")
     .run(id, session.userId);
   return NextResponse.json({ success: true });

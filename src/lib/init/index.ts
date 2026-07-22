@@ -1,5 +1,7 @@
 import { runMigrations } from "@/lib/db/migrate";
-import { sqlite } from "@/lib/db";
+import { db } from "@/lib/db";
+import { jobs, batchJobs } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { jobQueue } from "@/lib/fpga/queue";
 import { sessionEnforcer } from "@/lib/sessions/enforcer";
 import { uartService } from "@/lib/hardware/uart";
@@ -13,7 +15,7 @@ let initialized = false;
  * Server initialization — runs migrations and starts background services.
  * This is called once on server startup.
  */
-export function initializeServer() {
+export async function initializeServer() {
   if (initialized) return;
   if (process.env.NEXT_PHASE === "phase-production-build") {
     return;
@@ -22,75 +24,74 @@ export function initializeServer() {
 
   console.log("[Init] Initializing server...");
 
-  // Run database migrations
-  runMigrations();
+  try {
+    // Run database migrations
+    await runMigrations();
 
-  // Start job queue processor
-  jobQueue.start();
+    // Start job queue processor
+    jobQueue.start();
 
-  // Listen to JTAG job completions to update parent batch status dynamically
-  jobQueue.on("job-complete", (data) => {
-    try {
-      const jobId = data.jobId;
-      const jobRecord = sqlite
-        .prepare("SELECT batch_id, status FROM jobs WHERE id = ?")
-        .get(jobId) as { batch_id: string | null; status: string } | undefined;
+    // Listen to JTAG job completions to update parent batch status dynamically
+    jobQueue.on("job-complete", async (data) => {
+      try {
+        const jobId = data.jobId;
+        const [jobRecord] = await db
+          .select({ batchId: jobs.batchId, status: jobs.status })
+          .from(jobs)
+          .where(eq(jobs.id, jobId));
 
-      if (jobRecord && jobRecord.batch_id) {
-        const batchId = jobRecord.batch_id;
+        if (jobRecord && jobRecord.batchId) {
+          const batchId = jobRecord.batchId;
 
-        // Count sub-jobs in this batch
-        const subJobs = sqlite
-          .prepare("SELECT status FROM jobs WHERE batch_id = ?")
-          .all(batchId) as { status: string }[];
+          // Count sub-jobs in this batch
+          const subJobs = await db
+            .select({ status: jobs.status })
+            .from(jobs)
+            .where(eq(jobs.batchId, batchId));
 
-        const total = subJobs.length;
-        const completed = subJobs.filter((sj) => sj.status === "success").length;
-        const failed = subJobs.filter((sj) => sj.status === "failed" || sj.status === "cancelled").length;
-        const done = completed + failed;
+          const total = subJobs.length;
+          const completed = subJobs.filter((sj) => sj.status === "success").length;
+          const failed = subJobs.filter((sj) => sj.status === "failed" || sj.status === "cancelled").length;
+          const done = completed + failed;
 
-        let batchStatus = "running";
-        if (done >= total) {
-          batchStatus = failed > 0 ? "failed" : "completed";
+          let batchStatus: "failed" | "pending" | "running" | "completed" = "running";
+          if (done >= total) {
+            batchStatus = failed > 0 ? "failed" : "completed";
+          }
+
+          await db
+            .update(batchJobs)
+            .set({
+              status: batchStatus,
+              completedBoards: completed,
+              failedBoards: failed,
+              completedAt: done >= total ? new Date().toISOString() : null,
+            })
+            .where(eq(batchJobs.id, batchId));
+
+          console.log(`[Batch] Updated batch ${batchId}: ${done}/${total} done (status: ${batchStatus})`);
         }
-
-        sqlite
-          .prepare(`
-            UPDATE batch_jobs 
-            SET status = ?, 
-                completed_boards = ?, 
-                failed_boards = ?,
-                completed_at = ?
-            WHERE id = ?
-          `)
-          .run(
-            batchStatus,
-            completed,
-            failed,
-            done >= total ? new Date().toISOString() : null,
-            batchId
-          );
-
-        console.log(`[Batch] Updated batch ${batchId}: ${done}/${total} done (status: ${batchStatus})`);
+      } catch (err) {
+        console.error("[Batch] Error updating batch status on job complete:", err);
       }
-    } catch (err) {
-      console.error("[Batch] Error updating batch status on job complete:", err);
-    }
-  });
+    });
 
-  // Start session enforcer
-  sessionEnforcer.start();
+    // Start session enforcer
+    sessionEnforcer.start();
 
-  // Start board health monitor
-  boardHealthMonitor.start();
+    // Start board health monitor
+    boardHealthMonitor.start();
 
-  // Expose services globally for WebSocket handlers in server.js
-  (globalThis as Record<string, unknown>).__jobQueue = jobQueue;
-  (globalThis as Record<string, unknown>).__uartService = uartService;
-  (globalThis as Record<string, unknown>).__sshService = sshService;
-  (globalThis as Record<string, unknown>).__cameraService = cameraService;
+    // Expose services globally for WebSocket handlers in server.js
+    (globalThis as Record<string, unknown>).__jobQueue = jobQueue;
+    (globalThis as Record<string, unknown>).__uartService = uartService;
+    (globalThis as Record<string, unknown>).__sshService = sshService;
+    (globalThis as Record<string, unknown>).__cameraService = cameraService;
 
-  console.log("[Init] Server initialized successfully");
+    console.log("[Init] Server initialized successfully");
+  } catch (err: any) {
+    console.error("[Init] Server initialization failed:", err.message);
+  }
 }
 
 /**

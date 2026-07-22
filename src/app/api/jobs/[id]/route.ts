@@ -15,7 +15,7 @@ export async function GET(
 
   const { id } = await params;
 
-  const job = db.select().from(jobs).where(eq(jobs.id, id)).get();
+  const [job] = await db.select().from(jobs).where(eq(jobs.id, id));
 
   if (!job) {
     return NextResponse.json({ error: "Job not found" }, { status: 404 });

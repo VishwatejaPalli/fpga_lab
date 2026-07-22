@@ -25,14 +25,13 @@ export const GET = withErrorHandler(async () => {
   // Students see their own jobs; researchers and admins see all
   const userJobs =
     session.role === "admin" || session.role === "researcher"
-      ? db.select().from(jobs).orderBy(desc(jobs.createdAt)).limit(100).all()
-      : db
+      ? await db.select().from(jobs).orderBy(desc(jobs.createdAt)).limit(100)
+      : await db
           .select()
           .from(jobs)
           .where(eq(jobs.userId, session.userId))
           .orderBy(desc(jobs.createdAt))
-          .limit(50)
-          .all();
+          .limit(50);
 
   return NextResponse.json({ jobs: userJobs });
 });
@@ -56,11 +55,10 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     const { boardId, bitstreamPath, bitstreamName } = parsed.data;
 
     // Check board exists
-    const board = db
+    const [board] = await db
       .select()
       .from(boards)
-      .where(eq(boards.id, boardId))
-      .get();
+      .where(eq(boards.id, boardId));
 
     if (!board) {
       return NextResponse.json({ error: "Board not found" }, { status: 404 });
@@ -87,7 +85,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     }
 
     // Auto-end the user's current active session if they have one
-    const userActiveSession = db
+    const [userActiveSession] = await db
       .select()
       .from(hwSessions)
       .where(
@@ -95,25 +93,22 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
           eq(hwSessions.userId, session.userId),
           eq(hwSessions.status, "active")
         )
-      )
-      .get();
+      );
 
     if (userActiveSession) {
-      db.update(hwSessions)
+      await db.update(hwSessions)
         .set({ status: "ended" })
-        .where(eq(hwSessions.id, userActiveSession.id))
-        .run();
+        .where(eq(hwSessions.id, userActiveSession.id));
 
       if (userActiveSession.boardId && userActiveSession.boardId !== boardId) {
-        db.update(boards)
+        await db.update(boards)
           .set({ status: "free" })
-          .where(eq(boards.id, userActiveSession.boardId))
-          .run();
+          .where(eq(boards.id, userActiveSession.boardId));
       }
     }
 
     // Check if the board has an active session
-    let boardActiveSession = db
+    const activeSessions = await db
       .select()
       .from(hwSessions)
       .where(
@@ -121,23 +116,21 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
           eq(hwSessions.boardId, boardId),
           eq(hwSessions.status, "active")
         )
-      )
-      .get();
+      );
+    let boardActiveSession: typeof hwSessions.$inferSelect | undefined = activeSessions[0];
 
     // If there is an active session, check if it has expired
     if (boardActiveSession) {
       const isExpired = new Date(boardActiveSession.expiresAt) < new Date();
       if (isExpired) {
         // Dynamically clean up expired session
-        db.update(hwSessions)
+        await db.update(hwSessions)
           .set({ status: "expired" })
-          .where(eq(hwSessions.id, boardActiveSession.id))
-          .run();
+          .where(eq(hwSessions.id, boardActiveSession.id));
         
-        db.update(boards)
+        await db.update(boards)
           .set({ status: "free", currentSessionId: null })
-          .where(eq(boards.id, boardId))
-          .run();
+          .where(eq(boards.id, boardId));
 
         // Update local variables for downstream checks
         board.status = "free";
@@ -170,7 +163,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
     // Create job (The JobQueue will automatically pick this up and process it)
     const jobId = uuid();
-    db.insert(jobs)
+    await db.insert(jobs)
       .values({
         id: jobId,
         userId: session.userId,
@@ -179,10 +172,9 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         bitstreamName,
         status: "queued",
         priority,
-      })
-      .run();
+      });
 
-    logAuditEvent({
+    await logAuditEvent({
       userId: session.userId,
       action: "job_queued",
       target: jobId,

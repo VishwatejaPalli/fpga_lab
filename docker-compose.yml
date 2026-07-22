@@ -1,6 +1,17 @@
-version: "3.8"
-
 services:
+  db:
+    image: postgres:15-alpine
+    container_name: fpga_lab_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: fpga_lab
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
   app:
     build:
       context: .
@@ -8,21 +19,15 @@ services:
     container_name: fpga_lab_app
     ports:
       - "3000:3000"
+    depends_on:
+      - db
+    env_file:
+      - .env.local
     environment:
       - NODE_ENV=production
-      - DB_PATH=/app/data/fpga_lab.db
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/fpga_lab
       - UPLOAD_DIR=/app/uploads
-      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-me}
-      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
-      - ALLOWED_EMAIL_DOMAINS=${ALLOWED_EMAIL_DOMAINS:-*}
-      - SMTP_HOST=${SMTP_HOST}
-      - SMTP_PORT=${SMTP_PORT:-587}
-      - SMTP_USER=${SMTP_USER}
-      - SMTP_PASS=${SMTP_PASS}
-      - SMTP_FROM=${SMTP_FROM:-FPGA Lab <noreply@lab.org>}
     volumes:
-      # Persist SQLite database and uploads directory
-      - ./data:/app/data
       - ./uploads:/app/uploads
       # Give container hardware access to JTAG/UART/Video (adjust paths if required)
       - /dev:/dev
@@ -30,3 +35,24 @@ services:
       - "/dev/bus/usb:/dev/bus/usb"
     privileged: true # Required for direct JTAG device mapping and openFPGALoader
     restart: unless-stopped
+
+  synthesis_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fpga_lab_synthesis_worker
+    command: ["node", "scripts/synthesis-worker.js"]
+    depends_on:
+      - db
+    env_file:
+      - .env.local
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/fpga_lab
+      - WORKSPACE_DIR=/app/uploads/workspaces
+    volumes:
+      - ./uploads:/app/uploads
+    restart: unless-stopped
+
+volumes:
+  pgdata:

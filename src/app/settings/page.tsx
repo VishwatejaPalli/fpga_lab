@@ -80,9 +80,6 @@ export default function SettingsPage() {
                   <div className="w-20 h-20 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center text-white font-bold text-3xl shadow-lg">
                     {user?.name?.charAt(0).toUpperCase() || "U"}
                   </div>
-                  <div>
-                    <button className="btn-secondary text-sm">Change Avatar</button>
-                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">

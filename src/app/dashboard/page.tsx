@@ -29,6 +29,7 @@ export default function DashboardPage() {
   const [boards, setBoards] = useState<Board[]>([]);
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isEndingSession, setIsEndingSession] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -67,6 +68,7 @@ export default function DashboardPage() {
 
   async function handleEndSession() {
     if (!activeSession) return;
+    setIsEndingSession(true);
     try {
       await fetch("/api/sessions", {
         method: "DELETE",
@@ -78,6 +80,7 @@ export default function DashboardPage() {
     } catch (err) {
       console.error("Failed to end session:", err);
     }
+    setIsEndingSession(false);
   }
 
   const freeCount = boards.filter((b) => b.status === "free").length;
@@ -141,9 +144,20 @@ export default function DashboardPage() {
                 </button>
                 <button
                   onClick={handleEndSession}
-                  className="btn-danger text-sm flex-1 sm:flex-none"
+                  disabled={isEndingSession}
+                  className="relative inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white transition-all duration-300 bg-red-600 rounded-lg shadow-lg hover:bg-red-500 hover:shadow-red-500/30 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed group flex-1 sm:flex-none"
                 >
-                  End Session
+                  {isEndingSession ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                      <span>Ending...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex items-center justify-center w-4 h-4 bg-white/20 rounded group-hover:bg-white/30 transition-colors">⏹</span>
+                      <span>End Session</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>

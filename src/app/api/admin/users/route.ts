@@ -13,7 +13,7 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const allUsers = db
+  const allUsers = await db
     .select({
       id: users.id,
       email: users.email,
@@ -22,8 +22,7 @@ export async function GET() {
       verified: users.verified,
       createdAt: users.createdAt,
     })
-    .from(users)
-    .all();
+    .from(users);
 
   return NextResponse.json({ users: allUsers });
 }
@@ -53,10 +52,9 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
-  db.update(users)
+  await db.update(users)
     .set({ role })
-    .where(eq(users.id, userId))
-    .run();
+    .where(eq(users.id, userId));
 
   return NextResponse.json({ ok: true });
 }
@@ -85,11 +83,10 @@ export async function POST(req: NextRequest) {
   // No server-side domain enforcement here (use ALLOWED_EMAIL_DOMAINS env if configured elsewhere)
 
   // Check if user exists
-  const existing = db
+  const [existing] = await db
     .select()
     .from(users)
-    .where(eq(users.email, email.toLowerCase()))
-    .get();
+    .where(eq(users.email, email.toLowerCase()));
   if (existing) {
     return NextResponse.json({ error: "User already exists" }, { status: 409 });
   }
@@ -97,7 +94,7 @@ export async function POST(req: NextRequest) {
   const userId = uuid();
   const passwordHash = await hashPassword(password);
 
-  db.insert(users)
+  await db.insert(users)
     .values({
       id: userId,
       email: email.toLowerCase(),
@@ -105,8 +102,7 @@ export async function POST(req: NextRequest) {
       name,
       role,
       verified: true,
-    })
-    .run();
+    });
 
   return NextResponse.json({ ok: true, id: userId }, { status: 201 });
 }
@@ -132,7 +128,7 @@ export async function DELETE(req: NextRequest) {
     );
   }
 
-  db.delete(users).where(eq(users.id, userId)).run();
+  await db.delete(users).where(eq(users.id, userId));
 
   return NextResponse.json({ ok: true });
 }

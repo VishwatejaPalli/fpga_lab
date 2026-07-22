@@ -24,11 +24,10 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     return NextResponse.json({ error: "Email is required" }, { status: 400 });
   }
 
-  const user = db
+  const [user] = await db
     .select()
     .from(users)
-    .where(eq(users.email, email.toLowerCase()))
-    .get();
+    .where(eq(users.email, email.toLowerCase()));
 
   // If user does not exist, return a generic success message to prevent user enumeration
   if (!user) {
@@ -40,17 +39,16 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
 
   // Clear any existing reset tokens for this user
-  db.delete(passwordResetTokens).where(eq(passwordResetTokens.userId, user.id)).run();
+  await db.delete(passwordResetTokens).where(eq(passwordResetTokens.userId, user.id));
 
   // Store new reset token
-  db.insert(passwordResetTokens)
+  await db.insert(passwordResetTokens)
     .values({
       id: uuid(),
       userId: user.id,
       tokenHash,
       expiresAt,
-    })
-    .run();
+    });
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const resetUrl = `${appUrl}/auth/reset-password?token=${rawToken}`;

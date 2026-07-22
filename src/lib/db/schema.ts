@@ -1,17 +1,17 @@
-import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
+import { pgTable, text, integer, boolean, index } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 // ─── Users ───────────────────────────────────────────────────────────────────
-export const users = sqliteTable("users", {
+export const users = pgTable("users", {
   id: text("id").primaryKey(), // UUID
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   name: text("name").notNull(),
-  role: text("role", { enum: ["student", "researcher", "admin", "guest"] })
+  role: text("role").$type<"student" | "researcher" | "admin" | "guest">()
     .notNull()
     .default("student"),
-  verified: integer("verified", { mode: "boolean" }).notNull().default(false),
-  status: text("status", { enum: ["active", "suspended"] })
+  verified: boolean("verified").notNull().default(false),
+  status: text("status").$type<"active" | "suspended">()
     .notNull()
     .default("active"),
   lastLogin: text("last_login"),
@@ -19,11 +19,11 @@ export const users = sqliteTable("users", {
   lockedUntil: text("locked_until"),
   createdAt: text("created_at")
     .notNull()
-    .default(sql`(datetime('now'))`),
+    .default(sql`CURRENT_TIMESTAMP::text`),
 });
 
 // ─── Email verification tokens ──────────────────────────────────────────────
-export const verificationTokens = sqliteTable("verification_tokens", {
+export const verificationTokens = pgTable("verification_tokens", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()
@@ -33,7 +33,7 @@ export const verificationTokens = sqliteTable("verification_tokens", {
 });
 
 // ─── Sessions (auth) ────────────────────────────────────────────────────────
-export const sessions = sqliteTable("sessions", {
+export const sessions = pgTable("sessions", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()
@@ -43,14 +43,12 @@ export const sessions = sqliteTable("sessions", {
 });
 
 // ─── FPGA Boards ────────────────────────────────────────────────────────────
-export const boards = sqliteTable("boards", {
+export const boards = pgTable("boards", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   fpgaFamily: text("fpga_family").notNull(), // e.g. "Xilinx Artix-7"
   boardType: text("board_type").notNull(), // openFPGALoader board name e.g. "basys3"
-  connectionType: text("connection_type", {
-    enum: ["jtag", "network", "usb"],
-  })
+  connectionType: text("connection_type").$type<"jtag" | "network" | "usb">()
     .notNull()
     .default("jtag"),
   devicePath: text("device_path"), // e.g. "/dev/ttyUSB0" for JTAG cable
@@ -62,7 +60,7 @@ export const boards = sqliteTable("boards", {
   programmingTool: text("programming_tool").default("openFPGALoader"), // tool override
   sshUsername: text("ssh_username"), // For network boards (e.g. "xilinx")
   sshPassword: text("ssh_password"), // For network boards (e.g. "xilinx")
-  status: text("status", { enum: ["free", "busy", "offline", "allocated", "programming"] })
+  status: text("status").$type<"free" | "busy" | "offline" | "allocated" | "programming">()
     .notNull()
     .default("free"),
   currentSessionId: text("current_session_id"),
@@ -70,11 +68,11 @@ export const boards = sqliteTable("boards", {
   sessionTimeoutMinutes: integer("session_timeout_minutes").default(30),
   createdAt: text("created_at")
     .notNull()
-    .default(sql`(datetime('now'))`),
+    .default(sql`CURRENT_TIMESTAMP::text`),
 });
 
 // ─── Jobs ───────────────────────────────────────────────────────────────────
-export const jobs = sqliteTable("jobs", {
+export const jobs = pgTable("jobs", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()
@@ -84,9 +82,7 @@ export const jobs = sqliteTable("jobs", {
     .references(() => boards.id, { onDelete: "cascade" }),
   bitstreamPath: text("bitstream_path").notNull(),
   bitstreamName: text("bitstream_name").notNull(),
-  status: text("status", {
-    enum: ["queued", "programming", "success", "failed", "cancelled"],
-  })
+  status: text("status").$type<"queued" | "programming" | "success" | "failed" | "cancelled">()
     .notNull()
     .default("queued"),
   priority: integer("priority").notNull().default(0),
@@ -95,7 +91,7 @@ export const jobs = sqliteTable("jobs", {
   logs: text("logs").default(""),
   createdAt: text("created_at")
     .notNull()
-    .default(sql`(datetime('now'))`),
+    .default(sql`CURRENT_TIMESTAMP::text`),
   startedAt: text("started_at"),
   completedAt: text("completed_at"),
 }, (table) => ({
@@ -103,7 +99,7 @@ export const jobs = sqliteTable("jobs", {
 }));
 
 // ─── Hardware Sessions ──────────────────────────────────────────────────────
-export const hwSessions = sqliteTable("hw_sessions", {
+export const hwSessions = pgTable("hw_sessions", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()
@@ -114,9 +110,9 @@ export const hwSessions = sqliteTable("hw_sessions", {
   jobId: text("job_id").references(() => jobs.id),
   startedAt: text("started_at")
     .notNull()
-    .default(sql`(datetime('now'))`),
+    .default(sql`CURRENT_TIMESTAMP::text`),
   expiresAt: text("expires_at").notNull(),
-  status: text("status", { enum: ["active", "expired", "ended"] })
+  status: text("status").$type<"active" | "expired" | "ended">()
     .notNull()
     .default("active"),
 }, (table) => ({
@@ -124,7 +120,7 @@ export const hwSessions = sqliteTable("hw_sessions", {
 }));
 
 // ─── Experiment Notes (Researcher) ──────────────────────────────────────────
-export const experimentNotes = sqliteTable("experiment_notes", {
+export const experimentNotes = pgTable("experiment_notes", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()
@@ -134,17 +130,17 @@ export const experimentNotes = sqliteTable("experiment_notes", {
   title: text("title").notNull(),
   content: text("content").notNull().default(""),
   tags: text("tags").default("[]"),
-  pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
+  pinned: boolean("pinned").notNull().default(false),
   createdAt: text("created_at")
     .notNull()
-    .default(sql`(datetime('now'))`),
+    .default(sql`CURRENT_TIMESTAMP::text`),
   updatedAt: text("updated_at")
     .notNull()
-    .default(sql`(datetime('now'))`),
+    .default(sql`CURRENT_TIMESTAMP::text`),
 });
 
 // ─── Board Reservations (Researcher) ────────────────────────────────────────
-export const boardReservations = sqliteTable("board_reservations", {
+export const boardReservations = pgTable("board_reservations", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()
@@ -155,16 +151,16 @@ export const boardReservations = sqliteTable("board_reservations", {
   startsAt: text("starts_at").notNull(),
   endsAt: text("ends_at").notNull(),
   purpose: text("purpose").default(""),
-  status: text("status", { enum: ["confirmed", "cancelled"] })
+  status: text("status").$type<"confirmed" | "cancelled">()
     .notNull()
     .default("confirmed"),
   createdAt: text("created_at")
     .notNull()
-    .default(sql`(datetime('now'))`),
+    .default(sql`CURRENT_TIMESTAMP::text`),
 });
 
 // ─── API Keys (Researcher) ──────────────────────────────────────────────────
-export const apiKeys = sqliteTable("api_keys", {
+export const apiKeys = pgTable("api_keys", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()
@@ -176,17 +172,17 @@ export const apiKeys = sqliteTable("api_keys", {
   expiresAt: text("expires_at"),
   createdAt: text("created_at")
     .notNull()
-    .default(sql`(datetime('now'))`),
+    .default(sql`CURRENT_TIMESTAMP::text`),
 });
 
 // ─── Batch Jobs (Researcher) ────────────────────────────────────────────────
-export const batchJobs = sqliteTable("batch_jobs", {
+export const batchJobs = pgTable("batch_jobs", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull().default("Untitled Batch"),
-  status: text("status", { enum: ["pending", "running", "completed", "failed"] })
+  status: text("status").$type<"pending" | "running" | "completed" | "failed">()
     .notNull()
     .default("pending"),
   totalBoards: integer("total_boards").notNull().default(0),
@@ -194,12 +190,12 @@ export const batchJobs = sqliteTable("batch_jobs", {
   failedBoards: integer("failed_boards").notNull().default(0),
   createdAt: text("created_at")
     .notNull()
-    .default(sql`(datetime('now'))`),
+    .default(sql`CURRENT_TIMESTAMP::text`),
   completedAt: text("completed_at"),
 });
 
 // ─── Security Refresh Tokens ────────────────────────────────────────────────
-export const refreshTokens = sqliteTable("refresh_tokens", {
+export const refreshTokens = pgTable("refresh_tokens", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()
@@ -210,11 +206,11 @@ export const refreshTokens = sqliteTable("refresh_tokens", {
   ipAddress: text("ip_address"),
   createdAt: text("created_at")
     .notNull()
-    .default(sql`(datetime('now'))`),
+    .default(sql`CURRENT_TIMESTAMP::text`),
 });
 
 // ─── Password Reset Tokens ──────────────────────────────────────────────────
-export const passwordResetTokens = sqliteTable("password_reset_tokens", {
+export const passwordResetTokens = pgTable("password_reset_tokens", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()
@@ -223,11 +219,11 @@ export const passwordResetTokens = sqliteTable("password_reset_tokens", {
   expiresAt: text("expires_at").notNull(),
   createdAt: text("created_at")
     .notNull()
-    .default(sql`(datetime('now'))`),
+    .default(sql`CURRENT_TIMESTAMP::text`),
 });
 
 // ─── Login Attempts (Rate Limiting) ─────────────────────────────────────────
-export const loginAttempts = sqliteTable("login_attempts", {
+export const loginAttempts = pgTable("login_attempts", {
   id: text("id").primaryKey(),
   email: text("email").notNull(),
   ipAddress: text("ip_address").notNull(),
@@ -235,11 +231,11 @@ export const loginAttempts = sqliteTable("login_attempts", {
   resetAt: text("reset_at").notNull(),
   createdAt: text("created_at")
     .notNull()
-    .default(sql`(datetime('now'))`),
+    .default(sql`CURRENT_TIMESTAMP::text`),
 });
 
 // ─── Audit Logs ─────────────────────────────────────────────────────────────
-export const auditLogs = sqliteTable("audit_logs", {
+export const auditLogs = pgTable("audit_logs", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .references(() => users.id, { onDelete: "set null" }),
@@ -250,5 +246,31 @@ export const auditLogs = sqliteTable("audit_logs", {
   metadata: text("metadata").default("{}"),
   createdAt: text("created_at")
     .notNull()
-    .default(sql`(datetime('now'))`),
+    .default(sql`CURRENT_TIMESTAMP::text`),
+});
+
+// ─── Synthesis Jobs ─────────────────────────────────────────────────────────
+export const synthesisJobs = pgTable("synthesis_jobs", {
+  id: text("id").primaryKey(), // UUID
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  boardId: text("board_id")
+    .notNull()
+    .references(() => boards.id, { onDelete: "cascade" }),
+  status: text("status").$type<"queued" | "processing" | "success" | "failed">()
+    .notNull()
+    .default("queued"),
+  topModule: text("top_module").notNull().default("main"),
+  workDir: text("work_dir").notNull(),
+  logs: text("logs").default(""),
+  schematic: text("schematic").default(""),
+  timingReport: text("timing_report").default(""),
+  powerReport: text("power_report").default(""),
+  areaReport: text("area_report").default(""),
+  waveformData: text("waveform_data").default(""),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP::text`),
+  completedAt: text("completed_at"),
 });

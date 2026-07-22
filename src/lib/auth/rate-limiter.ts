@@ -8,28 +8,28 @@ interface RateLimitOptions {
   windowMs: number;
 }
 
-export function checkRateLimit(options: RateLimitOptions): { allowed: boolean; remaining: number; resetAt: Date } {
+export async function checkRateLimit(options: RateLimitOptions): Promise<{ allowed: boolean; remaining: number; resetAt: Date }> {
   const { email, ipAddress, maxAttempts, windowMs } = options;
   const now = Date.now();
   const resetAtTime = now + windowMs;
   
   try {
     // Clean up expired records
-    sqlite.prepare("DELETE FROM login_attempts WHERE datetime(reset_at) < datetime('now')").run();
+    await sqlite.prepare("DELETE FROM login_attempts WHERE datetime(reset_at) < datetime('now')").run();
   } catch (err) {
     console.error("[RateLimit] Clean error:", err);
   }
   
   try {
     // Find attempt record by email and IP
-    let record = sqlite
+    let record = await sqlite
       .prepare("SELECT id, count, reset_at FROM login_attempts WHERE email = ? AND ip_address = ?")
       .get(email, ipAddress) as { id: string; count: number; reset_at: string } | undefined;
       
     if (!record) {
       const id = uuid();
       const resetAtStr = new Date(resetAtTime).toISOString();
-      sqlite
+      await sqlite
         .prepare("INSERT INTO login_attempts (id, email, ip_address, count, reset_at) VALUES (?, ?, ?, ?, ?)")
         .run(id, email, ipAddress, 1, resetAtStr);
         
@@ -45,7 +45,7 @@ export function checkRateLimit(options: RateLimitOptions): { allowed: boolean; r
     if (now > recordResetAt) {
       // Window expired, reset count
       const resetAtStr = new Date(resetAtTime).toISOString();
-      sqlite
+      await sqlite
         .prepare("UPDATE login_attempts SET count = 1, reset_at = ? WHERE id = ?")
         .run(resetAtStr, record.id);
         
@@ -65,7 +65,7 @@ export function checkRateLimit(options: RateLimitOptions): { allowed: boolean; r
     }
     
     // Increment count
-    sqlite
+    await sqlite
       .prepare("UPDATE login_attempts SET count = count + 1 WHERE id = ?")
       .run(record.id);
       
@@ -85,9 +85,9 @@ export function checkRateLimit(options: RateLimitOptions): { allowed: boolean; r
   }
 }
 
-export function clearRateLimit(email: string, ipAddress: string) {
+export async function clearRateLimit(email: string, ipAddress: string) {
   try {
-    sqlite
+    await sqlite
       .prepare("DELETE FROM login_attempts WHERE email = ? AND ip_address = ?")
       .run(email, ipAddress);
   } catch (err) {

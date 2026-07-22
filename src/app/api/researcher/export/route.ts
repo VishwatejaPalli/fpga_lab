@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
   switch (type) {
     case "jobs":
-      data = sqlite
+      data = await sqlite
         .prepare(
           `SELECT j.id, j.bitstream_name, j.status, j.logs, j.created_at, j.started_at, j.completed_at,
             b.name as board_name, b.fpga_family, b.board_type
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
       break;
 
     case "sessions":
-      data = sqlite
+      data = await sqlite
         .prepare(
           `SELECT hs.id, hs.started_at, hs.expires_at, hs.status,
             b.name as board_name, b.fpga_family
@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
       break;
 
     case "notes":
-      data = sqlite
+      data = await sqlite
         .prepare(
           `SELECT id, title, content, tags, job_id, board_id, pinned, created_at, updated_at
           FROM experiment_notes WHERE user_id = ? ORDER BY updated_at DESC`

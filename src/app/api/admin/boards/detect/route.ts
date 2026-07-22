@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { execSync } from "child_process";
-import { detectDevices } from "@/lib/fpga/detect";
+import { detectDevices, detectNetworkDevices } from "@/lib/fpga/detect";
 import { getSession } from "@/lib/auth/session";
 
 /**
@@ -51,7 +51,10 @@ export async function GET(req: NextRequest) {
       return { ...h, template };
     });
 
-    // 2. Scan for Serial Ports (UART)
+    // 2. Scan for Network Connected Devices (PYNQ, XVC, SSH)
+    const networkDevices = await detectNetworkDevices();
+
+    // 3. Scan for Serial Ports (UART)
     let serialPorts: string[] = [];
     try {
       const raw = execSync("ls /dev/ttyUSB* /dev/ttyACM* 2>/dev/null").toString();
@@ -60,7 +63,7 @@ export async function GET(req: NextRequest) {
       // Ignore errors if no ports are found
     }
 
-    // 3. Scan for Camera Devices
+    // 4. Scan for Camera Devices
     let cameras: string[] = [];
     try {
       const raw = execSync("ls /dev/video* 2>/dev/null").toString();
@@ -69,6 +72,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ 
       hardware: enrichedHardware, 
+      networkDevices,
       serialPorts,
       cameras,
       rawOutput

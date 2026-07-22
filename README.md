@@ -1,81 +1,175 @@
 # FPGA Lab — Cloud FPGA Remote Access Platform
 
-A full-stack web application that lets students remotely program and interact with FPGA development boards over the internet. Built for college labs with `.org` email authentication.
+A full-stack web application that lets students and researchers remotely program, synthesize, and interact with FPGA development boards over the internet. Built for college labs with email-domain-restricted authentication, an in-browser Verilog IDE, and a cloud synthesis pipeline.
+
+![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169E1?logo=postgresql&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-22-339933?logo=node.js&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green)
+
+---
 
 ## Features
 
+### Core Lab Features
 - **Remote FPGA Programming** — Upload bitstreams and program any supported FPGA board via openFPGALoader
 - **Live UART Terminal** — Real-time serial console over WebSocket with keyboard input
+- **SSH Terminal** — Full SSH sessions to network-connected SoC boards (e.g. PYNQ-Z2)
 - **Camera Feed** — MJPEG video stream of the physical board (LEDs, switches, displays)
-- **Session Management** — Time-limited exclusive access per board with auto-cleanup
+- **Virtual I/O** — Software switches, buttons, and LED indicators for board interaction
+- **Session Management** — Time-limited exclusive access per board with auto-cleanup and FPGA reset
 - **Board Agnostic** — Supports 200+ boards via openFPGALoader (Xilinx, Intel/Altera, Lattice, Gowin, etc.)
-- **College Auth** — Custom signup restricted to `.org` email domains with email verification
-- **Admin Panel** — Register boards, manage users, monitor system status
-- **Job Queue** — Queued programming jobs with per-board mutex and real-time log streaming
 
-## Security & Stability
+### Online Verilog IDE & Cloud Synthesis
+- **Monaco Editor** — Full VS Code-quality Verilog/SystemVerilog editor in the browser with syntax highlighting
+- **Multi-File Projects** — Tabbed editor with RTL and testbench file management
+- **Example Projects** — Built-in starter templates (UART TX, Blinky, Counters)
+- **Cloud Synthesis** — Server-side RTL synthesis via **Yosys** → **NextPNR** → bitstream generation
+- **Waveform Simulation** — Automatic testbench simulation via **Icarus Verilog** with VCD output
+- **Synthesis Reports** — Schematic diagrams (SVG), timing analysis, resource utilization, and power estimation
+- **One-Click Deploy** — Synthesized bitstreams can be directly programmed onto connected boards
 
-- **Robust Sanitization** — Full command injection protection across all API routes and hardware integration points.
-- **SSH Firewall** — Built-in stream parser that blocks dangerous shell commands before they reach the remote FPGA host.
-- **Path Traversal Protection** — Safe handling of user uploads and bitstream files.
-- **Graceful Shutdown** — Elegantly cleans up active camera feeds, serial ports, and WebSocket connections on server exit.
-- **Database Optimization** — Optimized polling queries with strategic indexes to prevent background task CPU spikes.
-- **Smart Reconnection** — Auto-recovery for unstable camera streams and resilient session timeout enforcement.
+### Researcher Dashboard
+- **Usage Analytics** — Charts for jobs/day, success rates, board utilization, peak hours (powered by Recharts)
+- **Experiment Notebooks** — Markdown-based lab notes with tagging, pinning, and search
+- **Board Reservations** — Schedule exclusive time slots for specific boards
+- **Batch Programming** — Program multiple boards simultaneously with a single bitstream
+- **API Keys** — Generate personal API keys for programmatic/scripted access
+- **Data Export** — Export job history and session data as CSV
+
+### Authentication & Security
+- **College Auth** — Signup restricted to configurable email domains with email verification
+- **Password Reset** — Forgot-password flow with secure email-based token reset
+- **JWT Auth** — Stateless authentication with httpOnly cookies, refresh token rotation, and token versioning
+- **Rate Limiting** — Brute-force protection with account lockout after failed attempts
+- **Command Injection Protection** — Full sanitization across all API routes and hardware integration points
+- **SSH Firewall** — Built-in stream parser that blocks dangerous shell commands before they reach remote hosts
+- **Path Traversal Protection** — Safe handling of user uploads and bitstream files
+- **Audit Logging** — All security-sensitive actions logged with IP, user-agent, and metadata
+
+### Admin Panel
+- **Board Management** — Register, edit, and remove boards; auto-detect connected hardware
+- **User Management** — View all users, toggle roles, suspend accounts
+- **System Monitoring** — Real-time system status and health checks
+
+### Infrastructure
+- **PostgreSQL** — Production-grade database with Drizzle ORM and auto-migration
+- **Docker Compose** — One-command deployment with app, database, and synthesis worker containers
+- **Ngrok Tunnel** — Built-in support for secure public access with static domains
+- **Systemd Services** — Production service files for both the app and ngrok tunnel
+- **Graceful Shutdown** — Clean teardown of camera feeds, serial ports, and WebSocket connections
+
+---
 
 ## Architecture
 
 ```
 ┌─────────────────┐     ┌──────────────────┐     ┌──────────────────┐     ┌───────────┐
-│   Browser       │◄───►│  Next.js + WS    │◄───►│  FPGA Services   │◄───►│  Hardware │
-│   (React SPA)   │     │  (server.js)     │     │  (programmer,    │     │  (JTAG,   │
-│                 │     │  Port 3000       │     │   UART, camera)  │     │   USB,    │
-│  - Dashboard    │     │  - API routes    │     │  - openFPGALoader│     │   serial) │
-│  - Upload       │     │  - WebSocket     │     │  - serialport    │     │           │
-│  - Termina      │     │  - Auth/JWT      │     │  - ffmpeg        │     │           │
-│  - Camera       │     │  - SQLite/Drizzle│     │  - Job queue     │     │           │
+│   Browser        │◄───►│  Next.js + WS    │◄───►│  FPGA Services   │◄───►│  Hardware  │
+│   (React SPA)    │     │  (server.js)     │     │  (programmer,    │     │  (JTAG,    │
+│                  │     │  Port 3000       │     │   UART, camera)  │     │   USB,     │
+│  - Dashboard     │     │  - API routes    │     │  - openFPGALoader│     │   serial)  │
+│  - Verilog IDE   │     │  - WebSocket     │     │  - serialport    │     │            │
+│  - Terminal      │     │  - Auth/JWT      │     │  - ffmpeg        │     │            │
+│  - Camera        │     │  - PostgreSQL    │     │  - Job queue     │     │            │
+│  - Researcher    │     │  - Drizzle ORM   │     │  - SSH sessions  │     │            │
 └─────────────────┘     └──────────────────┘     └──────────────────┘     └───────────┘
+                                                         │
+                                                         ▼
+                                                 ┌──────────────────┐
+                                                 │ Synthesis Worker │
+                                                 │  - Yosys         │
+                                                 │  - NextPNR       │
+                                                 │  - Icarus Verilog│
+                                                 │  - Bitstream gen │
+                                                 └──────────────────┘
 ```
+
+---
 
 ## Tech Stack
 
-| Layer      | Technology                                       |
-|------------|--------------------------------------------------|
-| Frontend   | Next.js 16 (App Router), React 19, Tailwind v4   |
-| Backend    | Next.js API Routes, custom `server.js` for WS    |
-| Database   | SQLite (better-sqlite3) + Drizzle ORM            |
-| Auth       | JWT (httpOnly cookies), bcryptjs, nodemailer     |
-| FPGA       | openFPGALoader (+ xsct, quartus_pgm overrides)   |
-| Serial     | serialport (Node.js native)                      |
-| Camera     | ffmpeg → MJPEG over HTTP                         |
-| WebSocket  | ws library (UART console, job logs)              |
+| Layer       | Technology                                               |
+|-------------|----------------------------------------------------------|
+| Frontend    | Next.js 16 (App Router), React 19, Tailwind CSS v4      |
+| Code Editor | Monaco Editor (@monaco-editor/react)                     |
+| Charts      | Recharts                                                 |
+| Backend     | Next.js API Routes, custom `server.js` for WebSocket     |
+| Database    | PostgreSQL 15 + Drizzle ORM (auto-migration)             |
+| Auth        | JWT (httpOnly cookies), bcryptjs, nodemailer              |
+| FPGA        | openFPGALoader (+ xsct, quartus_pgm overrides)          |
+| Synthesis   | Yosys (RTL), NextPNR (P&R), Icarus Verilog (simulation) |
+| Serial      | serialport (Node.js native)                              |
+| SSH         | ssh2 (Node.js)                                           |
+| Camera      | ffmpeg → MJPEG over HTTP                                 |
+| WebSocket   | ws library (UART, SSH, job logs, camera)                 |
+| Validation  | Zod schema validation                                    |
+| Container   | Docker + Docker Compose                                  |
+
+---
 
 ## Prerequisites
 
 - **Node.js 22+**
+- **PostgreSQL 15+** — `apt install postgresql` or use Docker Compose
 - **openFPGALoader** — `apt install openfpgaloader` or build from source
 - **ffmpeg** — `apt install ffmpeg` (for camera streaming)
-- **SMTP server** — For email verification (Office365, Gmail, etc.)
+- **SMTP server** — For email verification (Gmail, Office365, etc.)
 - FPGA boards connected via USB/JTAG to the server
+
+### Optional (for Cloud Synthesis)
+- **Yosys** — `apt install yosys` (RTL synthesis)
+- **NextPNR** — `apt install nextpnr-ice40` or `nextpnr-ecp5` (place & route)
+- **Icarus Verilog** — `apt install iverilog` (simulation)
+
+---
 
 ## Quick Start
 
+### Option 1: Docker Compose (Recommended)
+
 ```bash
-# 1. Clone and install
-git clone <your-repo-url> fpga-lab
-cd fpga-lab
-npm install
+# 1. Clone
+git clone https://github.com/VishwatejaPalli/fpga_lab.git
+cd fpga_lab
 
 # 2. Configure environment
 cp .env.example .env.local
-# Edit .env.local — set JWT_SECRET, SMTP credentials, allowed domains
+# Edit .env.local — set JWT_SECRET, SMTP credentials, DATABASE_URL, etc.
 
-# 3. Build
-npm run build
+# 3. Launch everything (PostgreSQL + App + Synthesis Worker)
+docker compose up -d
 
 # 4. Create admin user
+docker exec fpga_lab_app npx tsx scripts/seed-admin.ts --email admin@college.org --password yourpass --name "Lab Admin"
+
+# → http://localhost:3000
+```
+
+### Option 2: Manual Setup
+
+```bash
+# 1. Clone and install
+git clone https://github.com/VishwatejaPalli/fpga_lab.git
+cd fpga_lab
+npm install
+
+# 2. Start PostgreSQL (if not using Docker)
+sudo systemctl start postgresql
+createdb fpga_lab
+
+# 3. Configure environment
+cp .env.example .env.local
+# Edit .env.local — set DATABASE_URL, JWT_SECRET, SMTP credentials
+
+# 4. Build
+npm run build
+
+# 5. Create admin user
 npx tsx scripts/seed-admin.ts --email admin@college.org --password yourpass --name "Lab Admin"
 
-# 5. Start
+# 6. Start
 npm start
 # → http://localhost:3000
 ```
@@ -87,35 +181,53 @@ npm run dev
 # Hot-reload on http://localhost:3000
 ```
 
+### Local Network Access
+
+You don't need ngrok for local/campus access. Connect via your Pi's IP:
+
+- `http://192.168.1.44:3000` (replace with your Pi's actual local IP)
+- or `http://fpga-lab.local:3000` (if mDNS resolves on your network)
+
+---
+
 ## Configuration
 
-All settings are in `.env.local` (see `.env.example` for reference):
+All settings are in `.env.local`:
 
 | Variable                 | Description                          | Default                    |
 |--------------------------|--------------------------------------|----------------------------|
-| `DB_PATH`                | SQLite database file path            | `./data/fpga_lab.db`       |
+| `DATABASE_URL`           | PostgreSQL connection string         | `postgresql://postgres:postgres@localhost:5432/fpga_lab` |
 | `JWT_SECRET`             | Secret for signing JWT tokens        | *(must change)*            |
-| `SMTP_HOST`              | SMTP server hostname                 | `smtp.office365.com`       |
+| `SMTP_HOST`              | SMTP server hostname                 | `smtp.gmail.com`           |
 | `SMTP_PORT`              | SMTP server port                     | `587`                      |
-| `SMTP_USER`              | SMTP username                        | —                          |
-| `SMTP_PASS`              | SMTP password                        | —                          |
+| `SMTP_USER`              | SMTP username (email address)        | —                          |
+| `SMTP_PASS`              | SMTP password (App Password)         | —                          |
 | `SMTP_FROM`              | From address for emails              | —                          |
-| `ALLOWED_EMAIL_DOMAINS`  | Comma-separated allowed domains      | `yourcollege.org`          |
+| `ALLOWED_EMAIL_DOMAINS`  | Comma-separated allowed domains      | `*` (all domains)          |
 | `UPLOAD_DIR`             | Directory for uploaded bitstreams    | `./uploads`                |
+| `WORKSPACE_DIR`          | Directory for synthesis workspaces   | `./uploads/workspaces`     |
 | `MAX_UPLOAD_SIZE_MB`     | Max upload size in MB                | `50`                       |
 | `SESSION_TIMEOUT_MINUTES`| Board session timeout                | `30`                       |
 | `APP_PORT`               | Server port                          | `3000`                     |
+| `NEXT_PUBLIC_APP_URL`    | Public URL for email links           | `http://localhost:3000`    |
+| `NGROK_AUTHTOKEN`        | Ngrok auth token for tunneling       | —                          |
+| `NGROK_DOMAIN`           | Ngrok static domain                  | —                          |
+
+---
 
 ## User Flow
 
-1. **Sign up** with a `.org` college email → receive verification email
+1. **Sign up** with a college email → receive verification email
 2. **Verify** email via link → account activated
 3. **Log in** → redirected to dashboard
 4. **Select** an available FPGA board
-5. **Upload** a bitstream file (`.bit`, `.bin`, `.svf`, `.rbf`, `.sof`, etc.)
-6. **Program** → job is queued, real-time logs stream via WebSocket
-7. **Monitor** → UART terminal + camera feed, exclusive session for 30 min
-8. **End session** or auto-timeout → FPGA reset, board released
+5. **Upload** a bitstream file or **write Verilog** in the online IDE
+6. **Synthesize** (if using the editor) → Yosys compiles, generates schematic + reports
+7. **Program** → job is queued, real-time logs stream via WebSocket
+8. **Monitor** → UART terminal + SSH + Camera feed, exclusive session for 30 min
+9. **End session** or auto-timeout → FPGA reset, board released
+
+---
 
 ## Admin Guide
 
@@ -127,9 +239,12 @@ All settings are in `.env.local` (see `.env.example` for reference):
    - **Name**: Display name (e.g., "Basys 3 — Bench 1")
    - **FPGA Family**: e.g., "Xilinx Artix-7"
    - **Board Type**: openFPGALoader board name (e.g., `basys3`)
+   - **Connection Type**: `jtag`, `network`, or `usb`
    - **Device Path**: JTAG cable path (e.g., `/dev/ttyUSB0`)
    - **Serial Port**: UART serial path (e.g., `/dev/ttyUSB1`)
    - **Camera Device**: V4L2 device (e.g., `/dev/video0`)
+   - **IP Address**: For network boards like PYNQ (e.g., `192.168.2.99`)
+   - **SSH Credentials**: Username/password for SoC boards
    - **Capabilities**: Check LED, UART, Camera, Switches as applicable
 
 ### Detecting Connected Boards
@@ -158,131 +273,255 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6010", ATTRS{seria
 
 Reload: `sudo udevadm control --reload-rules && sudo udevadm trigger`
 
+---
+
 ## Production Deployment
 
-### Using the Setup Script
+### One-Command Setup
 
 ```bash
 sudo bash deploy/setup.sh
 ```
 
-This installs Node.js 22, openFPGALoader, ffmpeg, and creates the service user.
+This script automatically:
+- Installs Node.js 22, PostgreSQL, openFPGALoader, ffmpeg, ngrok, and system dependencies
+- Copies the project to `/opt/fpga-lab/`
+- Creates `.env.local` with your configuration
+- Runs `npm ci`, `next build`, and seeds the admin user
+- Configures ngrok authtoken
+- Installs and starts `fpga-lab` and `ngrok` systemd services
 
-### systemd Service
+### Docker Compose Deployment
+
+```bash
+# Build and start all services
+docker compose up -d --build
+
+# View logs
+docker compose logs -f app
+docker compose logs -f synthesis_worker
+
+# Stop
+docker compose down
+```
+
+The Docker Compose stack includes:
+- **db** — PostgreSQL 15 with persistent volume
+- **app** — Next.js app with hardware device passthrough (privileged mode)
+- **synthesis_worker** — Background worker for Yosys/NextPNR compilation jobs
+
+### Manual Deployment
 
 ```bash
 # Copy files to /opt/fpga-lab
 sudo cp -r . /opt/fpga-lab/
-sudo chown -R fpga-lab:fpga-lab /opt/fpga-lab/
+cd /opt/fpga-lab
 
-# Install service
+# Install dependencies and build
+npm ci --omit=dev
+npx next build
+npx tsx scripts/seed-admin.ts
+
+# Install systemd services
 sudo cp deploy/fpga-lab.service /etc/systemd/system/
+sudo cp deploy/ngrok.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now fpga-lab
+sudo systemctl enable --now ngrok
 
 # Check status
 sudo systemctl status fpga-lab
 sudo journalctl -u fpga-lab -f
 ```
 
-### Hardware Permissions
+### Ngrok Tunnel
 
-The service user needs access to USB devices:
+The app can be exposed publicly via ngrok with a static domain:
 
 ```bash
-# Add to required groups
-sudo usermod -aG dialout,video,plugdev fpga-lab
+# Configure authtoken (done automatically by setup.sh)
+ngrok config add-authtoken YOUR_NGROK_AUTHTOKEN
 
-# Or set udev rules for specific devices (recommended)
+# Check tunnel status
+sudo systemctl status ngrok
+sudo journalctl -u ngrok -f
 ```
+
+### Database Migration (SQLite → PostgreSQL)
+
+If upgrading from an older SQLite-based installation:
+
+```bash
+# Ensure PostgreSQL is running and the target database exists
+createdb fpga_lab
+
+# Run the migration script
+DB_PATH=./data/fpga_lab.db DATABASE_URL=postgresql://postgres:postgres@localhost:5432/fpga_lab node scripts/migrate-data.js
+```
+
+---
 
 ## API Reference
 
-| Method | Endpoint                    | Auth   | Description                    |
-|--------|-----------------------------|--------|--------------------------------|
-| POST   | `/api/auth/signup`          | Public | Register with .org email       |
-| POST   | `/api/auth/login`           | Public | Login, receive JWT cookie      |
-| POST   | `/api/auth/logout`          | Auth   | Clear session                  |
-| GET    | `/api/auth/verify?token=`   | Public | Verify email address           |
-| GET    | `/api/auth/me`              | Auth   | Current user info              |
-| GET    | `/api/boards`               | Auth   | List all boards                |
-| GET    | `/api/boards/:id`           | Auth   | Single board details           |
-| POST   | `/api/upload`               | Auth   | Upload bitstream (multipart)   |
-| GET    | `/api/jobs`                 | Auth   | List user's jobs               |
-| POST   | `/api/jobs`                 | Auth   | Submit programming job         |
-| GET    | `/api/jobs/:id`             | Auth   | Job status & logs              |
-| GET    | `/api/sessions`             | Auth   | Active hardware session        |
-| DELETE | `/api/sessions`             | Auth   | End current session            |
-| GET    | `/api/camera/:boardId`      | Auth   | MJPEG camera stream            |
-| GET    | `/api/admin/boards`         | Admin  | All boards (admin view)        |
-| POST   | `/api/admin/boards`         | Admin  | Register new board             |
-| DELETE | `/api/admin/boards`         | Admin  | Remove board                   |
-| GET    | `/api/admin/users`          | Admin  | List all users                 |
+### REST Endpoints
+
+| Method | Endpoint                         | Auth       | Description                       |
+|--------|----------------------------------|------------|-----------------------------------|
+| POST   | `/api/auth/signup`               | Public     | Register with email               |
+| POST   | `/api/auth/login`                | Public     | Login, receive JWT cookie         |
+| POST   | `/api/auth/logout`               | Auth       | Clear session                     |
+| GET    | `/api/auth/verify?token=`        | Public     | Verify email address              |
+| GET    | `/api/auth/me`                   | Auth       | Current user info                 |
+| POST   | `/api/auth/refresh`              | Auth       | Refresh access token              |
+| POST   | `/api/auth/forgot-password`      | Public     | Request password reset email      |
+| POST   | `/api/auth/reset-password`       | Public     | Reset password with token         |
+| GET    | `/api/boards`                    | Auth       | List all boards                   |
+| GET    | `/api/boards/:id`                | Auth       | Single board details              |
+| GET    | `/api/boards/:id/jupyter`        | Auth       | Jupyter notebook proxy            |
+| POST   | `/api/upload`                    | Auth       | Upload bitstream (multipart)      |
+| GET    | `/api/jobs`                      | Auth       | List user's jobs                  |
+| POST   | `/api/jobs`                      | Auth       | Submit programming job            |
+| GET    | `/api/jobs/:id`                  | Auth       | Job status & logs                 |
+| GET    | `/api/sessions`                  | Auth       | Active hardware session           |
+| DELETE | `/api/sessions`                  | Auth       | End current session               |
+| GET    | `/api/camera/:boardId`           | Auth       | MJPEG camera stream               |
+| GET    | `/api/status`                    | Auth       | System health status              |
+| POST   | `/api/synthesis`                 | Auth       | Submit Verilog for synthesis      |
+| GET    | `/api/synthesis/status?jobId=`   | Auth       | Check synthesis job status        |
+| GET    | `/api/researcher/analytics`      | Researcher | Usage analytics & charts          |
+| POST   | `/api/researcher/notebooks`      | Researcher | CRUD experiment notebooks         |
+| POST   | `/api/researcher/reservations`   | Researcher | Board reservation management      |
+| POST   | `/api/researcher/batch`          | Researcher | Batch programming jobs            |
+| POST   | `/api/researcher/api-keys`       | Researcher | API key management                |
+| GET    | `/api/researcher/export`         | Researcher | Export data as CSV                 |
+| GET    | `/api/researcher/telemetry`      | Researcher | Board telemetry data              |
+| GET    | `/api/admin/boards`              | Admin      | All boards (admin view)           |
+| POST   | `/api/admin/boards`              | Admin      | Register new board                |
+| POST   | `/api/admin/boards/detect`       | Admin      | Auto-detect connected boards      |
+| DELETE | `/api/admin/boards`              | Admin      | Remove board                      |
+| GET    | `/api/admin/users`               | Admin      | List all users                    |
+| GET    | `/api/admin/audit`               | Admin      | View audit logs                   |
 
 ### WebSocket Endpoints
 
-| Path                    | Description                           |
-|-------------------------|---------------------------------------|
-| `ws://host/ws/uart/:id` | Bidirectional UART serial console     |
-| `ws://host/ws/logs/:id` | Real-time job programming logs        |
+| Path                      | Description                           |
+|---------------------------|---------------------------------------|
+| `ws://host/ws/uart/:id`   | Bidirectional UART serial console     |
+| `ws://host/ws/ssh/:id`    | SSH terminal session                  |
+| `ws://host/ws/logs/:id`   | Real-time job programming logs        |
+| `ws://host/ws/camera/:id` | MJPEG camera frame stream             |
+
+---
+
+## Database Schema
+
+The application uses **16 tables** managed by Drizzle ORM with auto-migration:
+
+| Table                  | Description                                      |
+|------------------------|--------------------------------------------------|
+| `users`                | User accounts with role, status, token versioning |
+| `verification_tokens`  | Email verification tokens                         |
+| `password_reset_tokens`| Password reset tokens with expiry                 |
+| `refresh_tokens`       | JWT refresh tokens with device tracking           |
+| `login_attempts`       | Rate limiting and brute-force protection          |
+| `boards`               | FPGA board configuration and status               |
+| `jobs`                 | Programming job queue with priority               |
+| `hw_sessions`          | Active hardware sessions with timeout             |
+| `synthesis_jobs`       | Cloud synthesis jobs with reports                  |
+| `experiment_notes`     | Researcher lab notebooks                          |
+| `board_reservations`   | Board time-slot reservations                      |
+| `api_keys`             | Researcher API keys                               |
+| `batch_jobs`           | Multi-board batch programming jobs                |
+| `audit_logs`           | Security audit trail                              |
+| `sessions`             | Auth sessions                                     |
+
+---
 
 ## Project Structure
 
 ```
-fpga_ssh/
+fpga_lab/
 ├── server.js                    # Custom Node.js server (HTTP + WebSocket)
 ├── next.config.ts               # Next.js configuration
 ├── package.json
-├── .env.example                 # Environment template
+├── Dockerfile                   # Multi-stage Docker build
+├── docker-compose.yml           # Docker Compose (PostgreSQL + App + Synthesis Worker)
+├── .env.local                   # Environment configuration (gitignored)
 ├── deploy/
+│   ├── setup.sh                 # Automated server setup script
 │   ├── fpga-lab.service         # systemd unit file
-│   └── setup.sh                 # Server setup script
+│   ├── ngrok.service            # Ngrok tunnel service
+│   ├── nginx.conf               # Nginx reverse proxy config
+│   └── backup.sh                # Database backup script
 ├── scripts/
-│   └── seed-admin.ts            # Create first admin user
+│   ├── seed-admin.ts            # Create first admin user
+│   ├── seed-demo.ts             # Seed demo boards and data
+│   ├── migrate-data.js          # SQLite → PostgreSQL data migration
+│   ├── synthesis-worker.js      # Background synthesis compilation worker
+│   └── synthesize.sh            # Synthesis helper script
 ├── src/
-│   ├── middleware.ts             # Auth middleware (JWT check)
 │   ├── app/
 │   │   ├── page.tsx             # Landing page
-│   │   ├── globals.css          # Dark theme styles
-│   │   ├── layout.tsx           # Root layout
-│   │   ├── auth/
-│   │   │   ├── login/page.tsx   # Login form
-│   │   │   ├── signup/page.tsx  # Signup form
-│   │   │   └── verify/page.tsx  # Email verification
+│   │   ├── globals.css          # Theme styles (light + dark)
+│   │   ├── layout.tsx           # Root layout + server init
+│   │   ├── auth/                # Login, signup, verify, forgot/reset password
 │   │   ├── dashboard/page.tsx   # Board selection grid
-│   │   ├── program/page.tsx     # Upload & program flow
-│   │   ├── monitor/[boardId]/page.tsx  # UART + Camera monitor
-│   │   ├── admin/page.tsx       # Admin panel
-│   │   └── api/                 # API routes (see table above)
+│   │   ├── editor/page.tsx      # Online Verilog IDE (Monaco + Synthesis)
+│   │   ├── monitor/[boardId]/   # UART + SSH + Camera + Virtual I/O
+│   │   ├── pynq/[boardId]/      # PYNQ Jupyter SoC lab
+│   │   ├── admin/               # User & board management
+│   │   ├── researcher/          # Analytics, notebooks, reservations, batch, API keys
+│   │   ├── history/page.tsx     # Job & session history
+│   │   ├── profile/page.tsx     # User profile & stats
+│   │   ├── settings/page.tsx    # User settings
+│   │   ├── status/page.tsx      # System status page
+│   │   ├── help/page.tsx        # Help documentation
+│   │   └── api/                 # 18+ API route groups
 │   ├── components/
-│   │   ├── navbar.tsx           # Navigation bar
+│   │   ├── navbar.tsx           # Navigation bar (responsive)
 │   │   ├── board-card.tsx       # Board status card
 │   │   ├── upload-zone.tsx      # Drag-and-drop upload
 │   │   ├── terminal.tsx         # WebSocket UART terminal
-│   │   └── camera-feed.tsx      # MJPEG camera viewer
+│   │   ├── ssh-terminal.tsx     # WebSocket SSH terminal
+│   │   ├── camera-feed.tsx      # MJPEG camera viewer
+│   │   ├── virtual-io.tsx       # Switches, buttons, LEDs
+│   │   ├── confirm-modal.tsx    # Reusable confirmation modal
+│   │   └── theme-provider.tsx   # Light/dark theme toggle
 │   └── lib/
-│       ├── init.ts              # Server initialization
+│       ├── init/index.ts        # Server initialization & service bootstrap
+│       ├── api-utils.ts         # Shared API error handler wrapper
+│       ├── audit.ts             # Audit logging utility
 │       ├── db/
-│       │   ├── schema.ts        # Drizzle ORM schema (6 tables)
-│       │   ├── index.ts         # Database singleton
-│       │   └── migrate.ts       # Auto-migration
+│       │   ├── schema.ts        # Drizzle ORM schema (16 tables)
+│       │   ├── index.ts         # PostgreSQL connection pool + compatibility layer
+│       │   └── migrate.ts       # Auto-migration (DDL)
 │       ├── auth/
 │       │   ├── jwt.ts           # JWT sign/verify
 │       │   ├── password.ts      # bcrypt hash/verify
-│       │   ├── email.ts         # Email verification
-│       │   └── session.ts       # Session helpers
+│       │   ├── email.ts         # Email verification (SMTP)
+│       │   ├── session.ts       # Session helpers
+│       │   ├── crypto.ts        # Token generation
+│       │   └── rate-limiter.ts  # Login rate limiting + lockout
 │       ├── fpga/
 │       │   ├── programmer.ts    # FPGA programming abstraction
 │       │   ├── queue.ts         # Job queue with board mutex
 │       │   ├── detect.ts        # Board auto-detection
-│       │   └── reset.ts         # FPGA reset on session end
+│       │   ├── reset.ts         # FPGA reset on session end
+│       │   ├── bitstream-validator.ts  # File validation
+│       │   └── demo-runner.ts   # Demo mode runner
 │       ├── hardware/
 │       │   ├── uart.ts          # Serial port service
-│       │   └── camera.ts        # MJPEG camera service
+│       │   ├── ssh.ts           # SSH connection service
+│       │   ├── camera.ts        # MJPEG camera service
+│       │   ├── pynq-telemetry.ts # PYNQ board monitoring
+│       │   └── board-health.ts  # Board health monitor
 │       └── sessions/
-│           └── enforcer.ts      # Session timeout enforcer
-└── data/                        # SQLite database (gitignored)
+│           └── enforcer.ts      # Session timeout enforcer + FPGA reset
+├── data/                        # Legacy SQLite database (gitignored)
+└── uploads/                     # User uploads & synthesis workspaces (gitignored)
 ```
+
+---
 
 ## Supported Bitstream Formats
 
@@ -300,16 +539,23 @@ fpga_ssh/
 | `.fs`     | Gowin         | FPGA bitstream             |
 | `.gw`     | Gowin         | Gowin bitstream            |
 
+---
+
 ## Troubleshooting
 
 | Issue                               | Solution                                                              |
 |-------------------------------------|-----------------------------------------------------------------------|
 | `openFPGALoader: not found`         | Install: `apt install openfpgaloader` or build from source            |
-| `Permission denied: /dev/ttyUSB0`   | `sudo usermod -aG dialout $USER` then re-login                        |
+| `Permission denied: /dev/ttyUSB0`   | `sudo usermod -aG dialout $USER` then re-login                       |
 | SMTP emails not sending             | Check SMTP credentials in `.env.local`; for dev, check console logs   |
 | Camera feed not working             | Ensure `ffmpeg` installed, camera device exists: `ls /dev/video*`     |
 | WebSocket connection failed         | Ensure you're using `node server.js`, not `next dev` directly         |
 | Build fails with serialport         | Run `npm rebuild` to rebuild native modules                           |
+| PostgreSQL connection refused       | Check `DATABASE_URL` in `.env.local`; ensure PostgreSQL is running    |
+| Synthesis fails with "not found"    | Install Yosys: `apt install yosys`; NextPNR: `apt install nextpnr-ice40` |
+| Migration script errors             | Ensure source SQLite DB exists and target PostgreSQL DB is created    |
+
+---
 
 ## License
 

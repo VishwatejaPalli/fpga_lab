@@ -23,7 +23,7 @@ class BoardHealthMonitor {
 
   private async checkAllBoards() {
     try {
-      const allBoards = db.select().from(boards).all();
+      const allBoards = await db.select().from(boards);
       
       for (const board of allBoards) {
         let isOnline = false;
@@ -61,10 +61,9 @@ class BoardHealthMonitor {
           if (board.status === "offline") {
             // Restore previous status based on session existence
             const newStatus = board.currentSessionId ? "allocated" : "free";
-            db.update(boards)
+            await db.update(boards)
               .set({ status: newStatus })
-              .where(eq(boards.id, board.id))
-              .run();
+              .where(eq(boards.id, board.id));
             console.log(`[Health] Board ${board.name} (${board.id}) is back ONLINE`);
           }
         } else {
@@ -73,10 +72,9 @@ class BoardHealthMonitor {
           
           if (newFailCount >= 3 && board.status !== "offline") {
             // Mark offline after 3 consecutive failures
-            db.update(boards)
+            await db.update(boards)
               .set({ status: "offline" })
-              .where(eq(boards.id, board.id))
-              .run();
+              .where(eq(boards.id, board.id));
             console.warn(`[Health Alert] Board ${board.name} (${board.id}) marked OFFLINE due to 3 consecutive failures`);
           }
         }

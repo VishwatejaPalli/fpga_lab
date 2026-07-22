@@ -10,7 +10,7 @@ export const GET = withErrorHandler(async () => {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const allBoards = db
+  const allBoards = await db
     .select({
       id: boards.id,
       name: boards.name,
@@ -22,8 +22,7 @@ export const GET = withErrorHandler(async () => {
       capabilities: boards.capabilities,
       sessionTimeoutMinutes: boards.sessionTimeoutMinutes,
     })
-    .from(boards)
-    .all();
+    .from(boards);
 
   // Parse capabilities JSON
   const parsed = allBoards.map((b) => ({

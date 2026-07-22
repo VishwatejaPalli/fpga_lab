@@ -31,11 +31,10 @@ class SSHService extends EventEmitter {
       return;
     }
 
-    const board = db
+    const [board] = await db
       .select()
       .from(boards)
-      .where(eq(boards.id, boardId))
-      .get();
+      .where(eq(boards.id, boardId));
 
     if (!board || !board.ipAddress) {
       console.warn(`[SSH] IP address not configured for board ${boardId}`);

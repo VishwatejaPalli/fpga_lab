@@ -42,11 +42,10 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     const { email, password, name, role } = parsed.data;
 
     // Check if user exists
-    const existing = db
+    const [existing] = await db
       .select()
       .from(users)
-      .where(eq(users.email, email.toLowerCase()))
-      .get();
+      .where(eq(users.email, email.toLowerCase()));
     if (existing) {
       return NextResponse.json(
         { error: "An account with this email already exists" },
@@ -57,7 +56,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     // Create user
     const userId = uuid();
     const passwordHash = await hashPassword(password);
-    db.insert(users)
+    await db.insert(users)
       .values({
         id: userId,
         email: email.toLowerCase(),
@@ -65,15 +64,13 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         name,
         role,
         verified: false,
-      })
-      .run();
+      });
 
     // Create verification token
     const token = generateToken();
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    db.insert(verificationTokens)
-      .values({ id: uuid(), userId, token, expiresAt })
-      .run();
+    await db.insert(verificationTokens)
+      .values({ id: uuid(), userId, token, expiresAt });
 
     // Send verification email (don't fail signup if email fails)
     try {

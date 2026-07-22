@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
   }
   query += " ORDER BY pinned DESC, updated_at DESC";
 
-  const notes = sqlite.prepare(query).all(...params) as NoteRow[];
+  const notes = await sqlite.prepare(query).all(...params) as NoteRow[];
   const parsed = notes.map((n) => ({
     ...n,
     tags: (() => {
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Title is required" }, { status: 400 });
 
   const id = uuid();
-  sqlite
+  await sqlite
     .prepare(
       `INSERT INTO experiment_notes (id, user_id, job_id, board_id, title, content, tags)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -85,19 +85,20 @@ export async function PUT(req: NextRequest) {
   if (!id) return NextResponse.json({ error: "Note ID required" }, { status: 400 });
 
   // Verify ownership
-  const note = sqlite.prepare("SELECT id FROM experiment_notes WHERE id = ? AND user_id = ?").get(id, session.userId);
+  // Verify ownership
+  const note = await sqlite.prepare("SELECT id FROM experiment_notes WHERE id = ? AND user_id = ?").get(id, session.userId);
   if (!note) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const updates: string[] = ["updated_at = datetime('now')"];
-  const params: (string | number)[] = [];
+  const params: (string | boolean | number)[] = [];
 
   if (title !== undefined) { updates.push("title = ?"); params.push(title); }
   if (content !== undefined) { updates.push("content = ?"); params.push(content); }
   if (tags !== undefined) { updates.push("tags = ?"); params.push(JSON.stringify(tags)); }
-  if (pinned !== undefined) { updates.push("pinned = ?"); params.push(pinned ? 1 : 0); }
+  if (pinned !== undefined) { updates.push("pinned = ?"); params.push(pinned ? true : false); }
 
   params.push(id, session.userId);
-  sqlite.prepare(`UPDATE experiment_notes SET ${updates.join(", ")} WHERE id = ? AND user_id = ?`).run(...params);
+  await sqlite.prepare(`UPDATE experiment_notes SET ${updates.join(", ")} WHERE id = ? AND user_id = ?`).run(...params);
 
   return NextResponse.json({ success: true });
 }
@@ -111,6 +112,6 @@ export async function DELETE(req: NextRequest) {
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "Note ID required" }, { status: 400 });
 
-  sqlite.prepare("DELETE FROM experiment_notes WHERE id = ? AND user_id = ?").run(id, session.userId);
+  await sqlite.prepare("DELETE FROM experiment_notes WHERE id = ? AND user_id = ?").run(id, session.userId);
   return NextResponse.json({ success: true });
 }

@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   if (rawRefreshToken) {
     try {
       const tokenHash = crypto.createHash("sha256").update(rawRefreshToken).digest("hex");
-      db.delete(refreshTokens).where(eq(refreshTokens.tokenHash, tokenHash)).run();
+      await db.delete(refreshTokens).where(eq(refreshTokens.tokenHash, tokenHash));
     } catch (err) {
       console.error("[Logout] Failed to revoke refresh token:", err);
     }

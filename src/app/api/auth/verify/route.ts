@@ -11,11 +11,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Token is required" }, { status: 400 });
     }
 
-    const record = db
+    const [record] = await db
       .select()
       .from(verificationTokens)
-      .where(eq(verificationTokens.token, token))
-      .get();
+      .where(eq(verificationTokens.token, token));
 
     if (!record) {
       return NextResponse.json(
@@ -26,9 +25,8 @@ export async function GET(req: NextRequest) {
 
     // Check expiry
     if (new Date(record.expiresAt) < new Date()) {
-      db.delete(verificationTokens)
-        .where(eq(verificationTokens.id, record.id))
-        .run();
+      await db.delete(verificationTokens)
+        .where(eq(verificationTokens.id, record.id));
       return NextResponse.json(
         { error: "Verification link has expired" },
         { status: 400 }
@@ -36,15 +34,13 @@ export async function GET(req: NextRequest) {
     }
 
     // Mark user as verified
-    db.update(users)
+    await db.update(users)
       .set({ verified: true })
-      .where(eq(users.id, record.userId))
-      .run();
+      .where(eq(users.id, record.userId));
 
     // Delete token
-    db.delete(verificationTokens)
-      .where(eq(verificationTokens.id, record.id))
-      .run();
+    await db.delete(verificationTokens)
+      .where(eq(verificationTokens.id, record.id));
 
     return NextResponse.json({ message: "Email verified successfully" });
   } catch (error) {

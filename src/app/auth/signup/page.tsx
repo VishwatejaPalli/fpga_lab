@@ -103,10 +103,11 @@ export default function SignupPage() {
                 <button
                   type="button"
                   onClick={() => setRole("student")}
+                  aria-pressed={role === "student"}
                   className={`p-3 rounded-xl border-2 text-center transition-all ${
                     role === "student"
-                      ? "border-primary bg-primary/5 text-primary"
-                      : "border-border text-muted hover:border-foreground"
+                      ? "border-primary bg-primary/10 text-primary shadow-sm"
+                      : "border-border bg-slate-900/40 dark:bg-slate-900/60 text-muted hover:border-foreground hover:text-foreground"
                   }`}
                 >
                   <div className="text-lg mb-0.5">🎓</div>
@@ -116,10 +117,11 @@ export default function SignupPage() {
                 <button
                   type="button"
                   onClick={() => setRole("researcher")}
+                  aria-pressed={role === "researcher"}
                   className={`p-3 rounded-xl border-2 text-center transition-all ${
                     role === "researcher"
-                      ? "border-primary bg-primary/5 text-primary"
-                      : "border-border text-muted hover:border-foreground"
+                      ? "border-primary bg-primary/10 text-primary shadow-sm"
+                      : "border-border bg-slate-900/40 dark:bg-slate-900/60 text-muted hover:border-foreground hover:text-foreground"
                   }`}
                 >
                   <div className="text-lg mb-0.5">🔬</div>

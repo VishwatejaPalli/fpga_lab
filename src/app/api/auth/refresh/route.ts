@@ -18,11 +18,10 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const tokenHash = crypto.createHash("sha256").update(rawRefreshToken).digest("hex");
 
   // Lookup the refresh token
-  const dbToken = db
+  const [dbToken] = await db
     .select()
     .from(refreshTokens)
-    .where(eq(refreshTokens.tokenHash, tokenHash))
-    .get();
+    .where(eq(refreshTokens.tokenHash, tokenHash));
 
   if (!dbToken) {
     return NextResponse.json({ error: "Invalid refresh token" }, { status: 401 });
@@ -31,7 +30,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   // Check if expired
   if (new Date(dbToken.expiresAt) < new Date()) {
     // Delete expired token from DB
-    db.delete(refreshTokens).where(eq(refreshTokens.id, dbToken.id)).run();
+    await db.delete(refreshTokens).where(eq(refreshTokens.id, dbToken.id));
     
     const response = NextResponse.json({ error: "Refresh token expired" }, { status: 401 });
     response.cookies.set("token", "", { maxAge: 0 });
@@ -40,15 +39,14 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   // Fetch the user
-  const user = db
+  const [user] = await db
     .select()
     .from(users)
-    .where(eq(users.id, dbToken.userId))
-    .get();
+    .where(eq(users.id, dbToken.userId));
 
   if (!user || user.status === "suspended") {
     // Revoke token if user doesn't exist or is suspended
-    db.delete(refreshTokens).where(eq(refreshTokens.id, dbToken.id)).run();
+    await db.delete(refreshTokens).where(eq(refreshTokens.id, dbToken.id));
     
     const response = NextResponse.json({ error: "User is suspended or deleted" }, { status: 401 });
     response.cookies.set("token", "", { maxAge: 0 });
@@ -69,9 +67,9 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
   // Rotate the refresh token by replacing the old one
-  db.delete(refreshTokens).where(eq(refreshTokens.id, dbToken.id)).run();
+  await db.delete(refreshTokens).where(eq(refreshTokens.id, dbToken.id));
   
-  db.insert(refreshTokens)
+  await db.insert(refreshTokens)
     .values({
       id: uuid(),
       userId: user.id,
@@ -79,8 +77,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       expiresAt: newExpiresAt,
       userAgent: req.headers.get("user-agent") || null,
       ipAddress: ip,
-    })
-    .run();
+    });
 
   const response = NextResponse.json({
     message: "Token refreshed successfully",

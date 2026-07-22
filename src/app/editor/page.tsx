@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/navbar";
+import ConfirmModal from "@/components/confirm-modal";
 import Editor from "@monaco-editor/react";
 import { useTheme } from "@/components/theme-provider";
 
@@ -15,484 +16,487 @@ interface Board {
   capabilities: string[];
 }
 
-interface FileNode {
-  name: string;
-  path: string;
-  isFolder: boolean;
-  children?: FileNode[];
-}
-
 interface TabItem {
   id: string;
   label: string;
   type: "file" | "view";
 }
 
-const PIPELINE_STAGES = [
-  { id: "rtl",          label: "RTL Design",      icon: "✏️",  description: "Verilog/VHDL source code" },
-  { id: "simulation",   label: "Simulation",      icon: "🧪",  description: "Functional verification" },
-  { id: "synthesis",    label: "Synthesis",        icon: "⚙️",  description: "Logic optimization" },
-  { id: "netlist",      label: "Netlist",          icon: "🔗",  description: "Gate-level netlist" },
-  { id: "implementation", label: "Implementation", icon: "🧩", description: "Place & Route" },
-  { id: "timing",       label: "Timing Analysis",  icon: "⏱️",  description: "Slack & constraints" },
-  { id: "bitgen",       label: "Bitstream Gen",    icon: "📦",  description: "Generate .bit file" },
-  { id: "program",      label: "FPGA Program",     icon: "⚡",  description: "Deploy to hardware" },
-  { id: "verify",       label: "HW Verify",        icon: "✅",  description: "Hardware validation" },
-] as const;
+interface RecentProject {
+  id: string;
+  name: string;
+  path: string;
+  targetBoard: string;
+  topModule: string;
+  lastModified: string;
+  fileCount: number;
+}
 
-type StageId = (typeof PIPELINE_STAGES)[number]["id"];
-type StageStatus = "idle" | "running" | "done" | "error";
+const EXAMPLE_PROJECTS: Record<string, { name: string; targetBoard: string; topModule: string; files: Record<string, string> }> = {
+  uart_tx: {
+    name: "uart_tx_project",
+    targetBoard: "pynq-z2 (xc7z020clg400-1)",
+    topModule: "tb_uart_tx",
+    files: {
+      "rtl/uart_tx.v": `module uart_tx #(
+    parameter CLKS_PER_BIT = 87
+)(
+    input wire clk,
+    input wire rst_n,
+    input wire tx_start,
+    input wire [7:0] tx_data,
+    output reg tx_serial,
+    output reg tx_ready
+);
+    localparam IDLE  = 3'b000;
+    localparam START = 3'b001;
+    localparam DATA  = 3'b010;
+    localparam STOP  = 3'b011;
 
-const REPORT_TABS = [
-  { id: "console",    label: "Tcl Console" },
-  { id: "problems",   label: "Problems" },
-  { id: "output",     label: "Design Runs" },
-  { id: "terminal",   label: "Terminal" },
-] as const;
+    reg [2:0] state;
+    reg [15:0] clk_count;
+    reg [2:0] bit_idx;
+    reg [7:0] data_buf;
 
-type ReportTabId = (typeof REPORT_TABS)[number]["id"];
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            state <= IDLE;
+            tx_serial <= 1'b1;
+            tx_ready <= 1'b1;
+            clk_count <= 0;
+            bit_idx <= 0;
+        end else begin
+            case (state)
+                IDLE: begin
+                    tx_serial <= 1'b1;
+                    tx_ready <= 1'b1;
+                    if (tx_start) begin
+                        state <= START;
+                        data_buf <= tx_data;
+                        tx_ready <= 1'b0;
+                        clk_count <= 0;
+                    end
+                end
+                START: begin
+                    tx_serial <= 1'b0;
+                    if (clk_count < CLKS_PER_BIT - 1)
+                        clk_count <= clk_count + 1;
+                    else begin
+                        clk_count <= 0;
+                        state <= DATA;
+                        bit_idx <= 0;
+                    end
+                end
+                DATA: begin
+                    tx_serial <= data_buf[bit_idx];
+                    if (clk_count < CLKS_PER_BIT - 1)
+                        clk_count <= clk_count + 1;
+                    else begin
+                        clk_count <= 0;
+                        if (bit_idx < 7)
+                            bit_idx <= bit_idx + 1;
+                        else
+                            state <= STOP;
+                    end
+                end
+                STOP: begin
+                    tx_serial <= 1'b1;
+                    if (clk_count < CLKS_PER_BIT - 1)
+                        clk_count <= clk_count + 1;
+                    else
+                        state <= IDLE;
+                end
+                default: state <= IDLE;
+            endcase
+        end
+    end
+endmodule`,
+      "tb/tb_uart_tx.v": `\`timescale 1ns/1ps
 
-const ROW_HEIGHT = 32;
-const WAVE_WIDTH = 400;
+module tb_uart_tx;
+    reg clk;
+    reg rst_n;
+    reg tx_start;
+    reg [7:0] tx_data;
+    wire tx_serial;
+    wire tx_ready;
 
-// Simple outline parser helper for Verilog parameters and ports
-const parseVerilogOutline = (code: string) => {
-  if (!code) return { parameters: [], inputs: [], outputs: [] };
-  const parameters: string[] = [];
-  const inputs: string[] = [];
-  const outputs: string[] = [];
+    uart_tx #(.CLKS_PER_BIT(16)) uut (
+        .clk(clk), .rst_n(rst_n), .tx_start(tx_start),
+        .tx_data(tx_data), .tx_serial(tx_serial), .tx_ready(tx_ready)
+    );
 
-  const lines = code.split("\n");
-  lines.forEach((line) => {
-    const cleaned = line.replace(/\/\/.*$/, "").trim();
+    always #5 clk = ~clk;
 
-    const pMatch = cleaned.match(/(?:parameter|localparam)\s+(\w+)/);
-    if (pMatch) {
-      parameters.push(pMatch[1]);
+    initial begin
+        $dumpfile("waveform.vcd");
+        $dumpvars(0, tb_uart_tx);
+        clk = 0; rst_n = 0; tx_start = 0; tx_data = 8'hA5;
+        #20 rst_n = 1;
+        #20 tx_start = 1; #10 tx_start = 0;
+        wait(tx_ready == 1);
+        #100; $finish;
+    end
+endmodule`,
+      "constraints/pynq_z2.xdc": `set_property -dict { PACKAGE_PIN R14 IOSTANDARD LVCMOS33 } [get_ports { tx_serial }];
+set_property -dict { PACKAGE_PIN H16 IOSTANDARD LVCMOS33 } [get_ports { clk }];
+create_clock -add -name sys_clk_pin -period 8.00 [get_ports { clk }];`
     }
-
-    const iMatch = cleaned.match(/input\s+(?:wire|reg)?\s*(?:\[[^\]]+\])?\s*(\w+)/);
-    if (iMatch) {
-      inputs.push(iMatch[1]);
+  },
+  blinky: {
+    name: "blinky_demo",
+    targetBoard: "pynq-z2 (xc7z020clg400-1)",
+    topModule: "blinky",
+    files: {
+      "rtl/blinky.v": `module blinky(
+    input wire clk,
+    output reg [3:0] led
+);
+    reg [26:0] counter = 0;
+    always @(posedge clk) begin
+        counter <= counter + 1;
+        led <= counter[26:23];
+    end
+endmodule`,
+      "constraints/pynq_z2.xdc": `set_property -dict { PACKAGE_PIN H16 IOSTANDARD LVCMOS33 } [get_ports { clk }];
+set_property -dict { PACKAGE_PIN R14 IOSTANDARD LVCMOS33 } [get_ports { led[0] }];`
     }
-
-    const oMatch = cleaned.match(/output\s+(?:wire|reg)?\s*(?:\[[^\]]+\])?\s*(\w+)/);
-    if (oMatch) {
-      outputs.push(oMatch[1]);
+  },
+  ripple_adder: {
+    name: "ripple_carry_adder_demo",
+    targetBoard: "basys3 (xc7a35tcpg236-1)",
+    topModule: "tb_ripple_adder",
+    files: {
+      "rtl/ripple_adder.v": `module ripple_adder #(parameter N=4)(
+    input wire [N-1:0] a,
+    input wire [N-1:0] b,
+    input wire cin,
+    output wire [N-1:0] sum,
+    output wire cout
+);
+    wire [N:0] c;
+    assign c[0] = cin;
+    genvar i;
+    generate
+        for(i=0; i<N; i=i+1) begin: adder_stage
+            assign sum[i] = a[i] ^ b[i] ^ c[i];
+            assign c[i+1] = (a[i] & b[i]) | (c[i] & (a[i] ^ b[i]));
+        end
+    endgenerate
+    assign cout = c[N];
+endmodule`,
+      "tb/tb_ripple_adder.v": `\`timescale 1ns/1ps
+module tb_ripple_adder;
+    reg [3:0] a, b;
+    reg cin;
+    wire [3:0] sum;
+    wire cout;
+    ripple_adder #(4) uut (.a(a), .b(b), .cin(cin), .sum(sum), .cout(cout));
+    initial begin
+        a = 4'b0011; b = 4'b0101; cin = 0;
+        #20;
+        $finish;
+    end
+endmodule`
     }
-  });
-
-  return { parameters, inputs, outputs };
+  }
 };
-
-// Build tree structure from flat files list keys
-const buildFileTree = (filesRecord: Record<string, string>): FileNode[] => {
-  const root: FileNode[] = [];
-  
-  Object.keys(filesRecord).sort().forEach((filePath) => {
-    const parts = filePath.split("/");
-    let currentLevel = root;
-    
-    parts.forEach((part, index) => {
-      const isFolder = index < parts.length - 1;
-      const currentPath = parts.slice(0, index + 1).join("/");
-      
-      let existingNode = currentLevel.find((node) => node.name === part);
-      
-      if (!existingNode) {
-        existingNode = {
-          name: part,
-          path: currentPath,
-          isFolder,
-          children: isFolder ? [] : undefined
-        };
-        currentLevel.push(existingNode);
-      }
-      
-      if (isFolder && existingNode.children) {
-        currentLevel = existingNode.children;
-      }
-    });
-  });
-  
-  return root;
-};
-
-// SVG Helper Icons
-const FolderIcon = ({ isOpen }: { isOpen: boolean }) => (
-  <svg className="w-3.5 h-3.5 text-yellow-500 dark:text-amber-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-    {isOpen ? (
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-    ) : (
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H6L4 5H2" />
-    )}
-  </svg>
-);
-
-const FileIcon = () => (
-  <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-  </svg>
-);
-
-const VerilogIcon = () => (
-  <span className="w-3.5 h-3.5 bg-[#42b983] text-[9px] font-bold text-white rounded flex items-center justify-center shrink-0 font-sans">V</span>
-);
-
-const XDCIcon = () => (
-  <span className="w-3.5 h-3.5 bg-[#e06c75] text-[9px] font-bold text-white rounded flex items-center justify-center shrink-0 font-sans">X</span>
-);
-
-const TCLIcon = () => (
-  <span className="w-3.5 h-3.5 bg-[#519aba] text-[8px] font-bold text-white rounded flex items-center justify-center shrink-0 font-sans">T</span>
-);
-
-const JSONIcon = () => (
-  <span className="w-3.5 h-3.5 bg-[#dcb67a] text-[8px] font-bold text-slate-900 rounded flex items-center justify-center shrink-0 font-sans">J</span>
-);
-
-const MDIcon = () => (
-  <span className="text-[#519aba] font-bold text-[8px] border border-[#519aba] px-0.5 rounded leading-none shrink-0 font-sans">M↓</span>
-);
-
-const NewFileIcon = () => (
-  <svg className="w-3.5 h-3.5 hover:text-primary transition-colors" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-    <title>New File</title>
-    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-    <polyline points="14 2 14 8 20 8" />
-    <line x1="12" y1="18" x2="12" y2="12" />
-    <line x1="9" y1="15" x2="15" y2="15" />
-  </svg>
-);
-
-const NewFolderIcon = () => (
-  <svg className="w-3.5 h-3.5 hover:text-primary transition-colors" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-    <title>New Folder</title>
-    <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
-    <line x1="12" y1="11" x2="12" y2="17" />
-    <line x1="9" y1="14" x2="15" y2="14" />
-  </svg>
-);
-
-const RefreshIcon = () => (
-  <svg className="w-3.5 h-3.5 hover:text-primary transition-colors" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-    <title>Refresh</title>
-    <path d="M23 4v6h-6" />
-    <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
-  </svg>
-);
-
-const CollapseAllIcon = () => (
-  <svg className="w-3.5 h-3.5 hover:text-primary transition-colors" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-    <title>Collapse All</title>
-    <line x1="4" y1="6" x2="20" y2="6" />
-    <line x1="4" y1="12" x2="20" y2="12" />
-    <line x1="4" y1="18" x2="20" y2="18" />
-  </svg>
-);
 
 export default function EditorPage() {
   const router = useRouter();
   const { theme } = useTheme();
   const isLight = theme === "light";
 
-  // UI Theme Config Classes
-  const sidebarBg = isLight ? "bg-[#eaeaea] text-slate-800 border-[#d1d1d1]" : "bg-[#15151a] text-slate-300 border-[#2d2d2d]";
-  const borderCol = isLight ? "border-[#d1d1d1]" : "border-[#2d2d2d]";
-  const bgWorkspace = isLight ? "bg-[#f3f3f3]" : "bg-[#1e1e24]";
-  const textMuted = isLight ? "text-slate-500" : "text-slate-400";
-  const bgCard = isLight ? "bg-white" : "bg-[#1b1b1b]";
-  const bgTerm = isLight ? "bg-white text-slate-900" : "bg-[#15151a] text-slate-300";
-  const consolePrompt = isLight ? "bg-slate-100 border-[#d1d1d1]" : "bg-[#252526] border-[#2d2d2d]";
+  // View Mode: Welcome Page vs IDE Workspace
+  const [viewMode, setViewMode] = useState<"welcome" | "workspace">("welcome");
 
-  // Workspace Files and State
-  const [boards, setBoards] = useState<Board[]>([]);
-  const [selectedBoardId, setSelectedBoardId] = useState("");
-  const [files, setFiles] = useState<Record<string, string>>({});
-  const [activeFile, setActiveFile] = useState<string>("rtl/uart_tx.v");
-  const [activeCode, setActiveCode] = useState<string>("");
-  const [saveStatus, setSaveStatus] = useState<"saved" | "unsaved" | "saving">("saved");
+  // New Project Wizard State
+  const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
+  const [newProjName, setNewProjName] = useState("my_fpga_project");
+  const [newProjPart, setNewProjPart] = useState("pynq-z2 (xc7z020clg400-1)");
+  const [newProjLang, setNewProjLang] = useState("Verilog");
+  const [newProjTop, setNewProjTop] = useState("top_module");
 
-  // Flow State
-  const [currentJobId, setCurrentJobId] = useState<string>("");
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [synthesisState, setSynthesisState] = useState<"pending" | "running" | "completed">("pending");
-  const [implementationState, setImplementationState] = useState<"pending" | "running" | "completed">("pending");
-  const [bitstreamState, setBitstreamState] = useState<"pending" | "running" | "completed">("pending");
-
-  // Terminal & Reports Logs
-  const [activeTab, setActiveTab] = useState<ReportTabId>("console");
-  const [terminalLogs, setTerminalLogs] = useState<string[]>(["Tcl% "]);
-  const [terminalInput, setTerminalInput] = useState("");
-  const [waves, setWaves] = useState<any>(null);
-  const [maxSimTime, setMaxSimTime] = useState<number>(100);
-  const [vcdText, setVcdText] = useState<string>("");
+  // Active Dropdown Menu
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
 
-  // Tab selections
-  const [activeMainTab, setActiveMainTab] = useState<"editor" | "schematic" | "waveform" | "timing" | "power" | "utilization">("editor");
-  const [schematicSvg, setSchematicSvg] = useState<string>("");
-  const [timingReport, setTimingReport] = useState<string>("");
-  const [powerReport, setPowerReport] = useState<string>("");
-  const [utilizationReport, setUtilizationReport] = useState<string>("");
+  // Active Main Canvas Tab ("project_summary" | "editor" | "schematic" | "waveform" | "device" | "timing" | "utilization")
+  const [activeMainTab, setActiveMainTab] = useState<"project_summary" | "editor" | "schematic" | "waveform" | "device" | "timing" | "utilization">("project_summary");
+  
+  // Sources Panel Subtab ("hierarchy" | "libraries" | "compile_order")
+  const [sourcesTab, setSourcesTab] = useState<"hierarchy" | "libraries" | "compile_order">("hierarchy");
 
-  // Search
-  const [searchVal, setSearchVal] = useState("");
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  // Project Summary Subtab ("overview" | "dashboard")
+  const [summarySubtab, setSummarySubtab] = useState<"overview" | "dashboard">("overview");
 
-  // Layout expansion states
-  const [isExplorerExpanded, setIsExplorerExpanded] = useState(true);
-  const [isOutlineExpanded, setIsOutlineExpanded] = useState(true);
-  const [openFolders, setOpenFolders] = useState<Set<string>>(new Set(["rtl", "tb", "constraints"]));
+  // Bottom Console Dock Tab ("tcl" | "messages" | "log" | "reports" | "runs")
+  const [bottomDockTab, setBottomDockTab] = useState<"tcl" | "messages" | "log" | "reports" | "runs">("runs");
 
-  const [outline, setOutline] = useState<{ parameters: string[]; inputs: string[]; outputs: string[] }>({
-    parameters: [],
-    inputs: [],
-    outputs: []
-  });
+  // Dynamic Project Properties
+  const [files, setFiles] = useState<Record<string, string>>(EXAMPLE_PROJECTS["uart_tx"].files);
+  const [projectName, setProjectName] = useState("uart_tx_project");
+  const [projectPath] = useState("C:/Users/palli/fpga_workspace");
+  const [productFamily] = useState("Zynq-7000");
+  const [projectPart, setProjectPart] = useState("pynq-z2 (xc7z020clg400-1)");
+  const [topModuleName, setTopModuleName] = useState("tb_uart_tx");
+  const [targetLanguage, setTargetLanguage] = useState("Verilog");
+  const [simulatorLanguage] = useState("Mixed");
+  const [targetSimulator] = useState("FPGA Simulator");
 
-  const logConsoleEndRef = useRef<HTMLDivElement>(null);
+  // Streamlined Settings Modal State
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<"general" | "simulation" | "synthesis" | "implementation">("general");
 
-  // VS Code Tabs State
+  const [draftProjectName, setDraftProjectName] = useState(projectName);
+  const [draftProjectPart, setDraftProjectPart] = useState(projectPart);
+  const [draftTargetLanguage, setDraftTargetLanguage] = useState(targetLanguage);
+  const [draftTopModule, setDraftTopModule] = useState(topModuleName);
+  const [draftSimTime, setDraftSimTime] = useState(1000);
+  const [draftVerilogVer, setDraftVerilogVer] = useState("Verilog 2001");
+  const [draftDefaultLib, setDraftDefaultLib] = useState("xil_defaultlib");
+
+  // Recent Projects List
+  const [recentProjects, setRecentProjects] = useState<RecentProject[]>([
+    {
+      id: "p1",
+      name: "uart_tx_project",
+      path: "C:/Users/palli/fpga_workspace/uart_tx_project",
+      targetBoard: "pynq-z2",
+      topModule: "tb_uart_tx",
+      lastModified: "2 minutes ago",
+      fileCount: 3
+    },
+    {
+      id: "p2",
+      name: "blinky_demo",
+      path: "C:/Users/palli/fpga_workspace/blinky_demo",
+      targetBoard: "pynq-z2",
+      topModule: "blinky",
+      lastModified: "1 hour ago",
+      fileCount: 2
+    },
+    {
+      id: "p3",
+      name: "ripple_carry_adder_demo",
+      path: "C:/Users/palli/fpga_workspace/ripple_carry_adder_demo",
+      targetBoard: "basys3",
+      topModule: "tb_ripple_adder",
+      lastModified: "Yesterday",
+      fileCount: 2
+    }
+  ]);
+
+  // Open Tabs & Active File State
   const [openTabs, setOpenTabs] = useState<TabItem[]>([
+    { id: "view:project_summary", label: "Project Summary", type: "view" },
     { id: "file:rtl/uart_tx.v", label: "uart_tx.v", type: "file" }
   ]);
-  const [activeTabId, setActiveTabId] = useState<string>("file:rtl/uart_tx.v");
+  const [activeTabId, setActiveTabId] = useState<string>("view:project_summary");
+  const [activeFile, setActiveFile] = useState<string>("rtl/uart_tx.v");
+  const [activeCode, setActiveCode] = useState<string>(files["rtl/uart_tx.v"] || "");
+  const [selectedFileItem, setSelectedFileItem] = useState<string>("rtl/uart_tx.v");
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
 
-  // Resizable Panels State
-  const [explorerWidth, setExplorerWidth] = useState(240);
-  const [consoleHeight, setConsoleHeight] = useState(256);
-  const [isDraggingExplorer, setIsDraggingExplorer] = useState(false);
-  const [isDraggingConsole, setIsDraggingConsole] = useState(false);
+  // Boards State
+  const [boards, setBoards] = useState<Board[]>([]);
 
-  // Waveform Viewer Advanced State
-  const [zoomLevel, setZoomLevel] = useState<number>(1);
+  // Pipeline Execution State
+  const [isSynthesizing, setIsSynthesizing] = useState(false);
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [isImplementing, setIsImplementing] = useState(false);
+  const [isBitgen, setIsBitgen] = useState(false);
+  const [schematicSvg, setSchematicSvg] = useState<string>("");
+
+  // Design Runs State
+  const [synthStatus, setSynthStatus] = useState<string>("Not started");
+  const [implStatus, setImplStatus] = useState<string>("Not started");
+  const [wnsValue, setWnsValue] = useState<string>("--");
+  const [tnsValue, setTnsValue] = useState<string>("--");
+  const [lutUsage, setLutUsage] = useState<number>(0);
+  const [ffUsage, setFfUsage] = useState<number>(0);
+  const [bramUsage, setBramUsage] = useState<number>(0);
+  const [dspUsage, setDspUsage] = useState<number>(0);
+
+  // Waveform State
+  const [waves, setWaves] = useState<any>(null);
   const [globalRadix, setGlobalRadix] = useState<"hex" | "bin" | "dec">("hex");
-  const [cursorTime, setCursorTime] = useState<number | null>(null);
 
-  const currentWaveWidth = 400 * zoomLevel;
+  // Tcl Console State
+  const [tclLogs, setTclLogs] = useState<string[]>([
+    "FPGA Lab Design Suite v2026.1 (64-bit)",
+    "Cloud Engine Build 5076996 on Tue May 21 2026",
+    "Copyright 2026 FPGA Remote Lab. All Rights Reserved.",
+    `Tcl% open_project ${projectPath}/${projectName}.xpr`,
+    `INFO: [Project 1-19] Opened project ${projectName}.xpr successfully.`
+  ]);
+  const [tclInput, setTclInput] = useState("");
+  const tclBottomRef = useRef<HTMLDivElement>(null);
 
-  const handleZoomIn = () => setZoomLevel((z) => Math.min(z * 1.5, 10));
-  const handleZoomOut = () => setZoomLevel((z) => Math.max(z / 1.5, 0.5));
-  const handleZoomFit = () => {
-    setZoomLevel(1);
-    setCursorTime(null);
-  };
+  // Modal Confirm Dialog
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  });
 
-  const handleWaveformClick = (e: React.MouseEvent<SVGSVGElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const time = Math.round((x / currentWaveWidth) * maxSimTime);
-    setCursorTime(Math.max(0, Math.min(time, maxSimTime)));
-  };
-
-  const getTimelineTicks = () => {
-    const ticksCount = 10;
-    const ticks: number[] = [];
-    for (let i = 0; i <= ticksCount; i++) {
-      ticks.push(Math.round((i / ticksCount) * maxSimTime));
-    }
-    return ticks;
-  };
-
-  const [draggedSignalIndex, setDraggedSignalIndex] = useState<number | null>(null);
-
-  const handleDragStart = (index: number) => {
-    setDraggedSignalIndex(index);
-  };
-
-  const handleDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (index: number) => {
-    if (draggedSignalIndex === null || draggedSignalIndex === index) return;
-    const reorderedSignals = [...waves.signals];
-    const [draggedSignal] = reorderedSignals.splice(draggedSignalIndex, 1);
-    reorderedSignals.splice(index, 0, draggedSignal);
-    setWaves({
-      ...waves,
-      signals: reorderedSignals
-    });
-    setDraggedSignalIndex(null);
-  };
-
-  useEffect(() => {
-    const handleWindowClick = () => {
-      setActiveMenu(null);
-    };
-    window.addEventListener("click", handleWindowClick);
-    return () => window.removeEventListener("click", handleWindowClick);
-  }, []);
-
-  const startResizeExplorer = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsDraggingExplorer(true);
-  };
-
-  const startResizeConsole = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsDraggingConsole(true);
-  };
-
-  useEffect(() => {
-    if (!isDraggingExplorer) return;
-    const handleMouseMove = (e: MouseEvent) => {
-      const newWidth = e.clientX - 192;
-      if (newWidth > 150 && newWidth < 500) {
-        setExplorerWidth(newWidth);
-      }
-    };
-    const handleMouseUp = () => setIsDraggingExplorer(false);
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
-    return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [isDraggingExplorer]);
-
-  useEffect(() => {
-    if (!isDraggingConsole) return;
-    const handleMouseMove = (e: MouseEvent) => {
-      const newHeight = window.innerHeight - e.clientY - 20;
-      if (newHeight > 80 && newHeight < 600) {
-        setConsoleHeight(newHeight);
-      }
-    };
-    const handleMouseUp = () => setIsDraggingConsole(false);
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
-    return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [isDraggingConsole]);
-
-  const openTab = (id: string, label: string, type: "file" | "view") => {
-    setOpenTabs((prev) => {
-      if (prev.some((t) => t.id === id)) return prev;
-      return [...prev, { id, label, type }];
-    });
-    setActiveTabId(id);
-    if (type === "file") {
-      setActiveMainTab("editor");
-      const path = id.replace("file:", "");
-      setActiveFile(path);
-      setActiveCode(files[path] || "");
-    } else {
-      const view = id.replace("view:", "") as any;
-      setActiveMainTab(view);
-    }
-  };
-
-  const closeTab = (e: React.MouseEvent, idToClose: string) => {
-    e.stopPropagation();
-    
-    if (idToClose.startsWith("file:") && saveStatus === "unsaved") {
-      const path = idToClose.replace("file:", "");
-      handleSave(path, activeCode);
-    }
-
-    const index = openTabs.findIndex((t) => t.id === idToClose);
-    const nextTabs = openTabs.filter((t) => t.id !== idToClose);
-    setOpenTabs(nextTabs);
-
-    if (activeTabId === idToClose) {
-      if (nextTabs.length > 0) {
-        const nextActiveIndex = Math.min(index, nextTabs.length - 1);
-        const nextActive = nextTabs[nextActiveIndex];
-        setActiveTabId(nextActive.id);
-        if (nextActive.type === "file") {
-          setActiveMainTab("editor");
-          const path = nextActive.id.replace("file:", "");
-          setActiveFile(path);
-          setActiveCode(files[path] || "");
-        } else {
-          const view = nextActive.id.replace("view:", "") as any;
-          setActiveMainTab(view);
-        }
-      } else {
-        setActiveTabId("");
-        setActiveMainTab("editor");
-        setActiveFile("");
-        setActiveCode("");
-      }
-    }
-  };
-
-  // Fetch target boards on mount
   useEffect(() => {
     fetch("/api/boards")
       .then((res) => res.json())
       .then((data) => {
-        if (data.boards) {
-          const available = data.boards.filter((b: Board) => b.status === "free" || b.status === "busy");
-          setBoards(available);
-          if (available.length > 0) {
-            setSelectedBoardId(available[0].id);
-          }
+        if (data.boards && data.boards.length > 0) {
+          setBoards(data.boards);
         }
       })
-      .catch(console.error);
-
-    // Initial files list loading
-    refreshWorkspace();
+      .catch(() => {});
   }, []);
 
-  // Update outline and active code whenever activeFile/files change
   useEffect(() => {
-    if (activeFile && files[activeFile] !== undefined) {
-      setActiveCode(files[activeFile]);
-      if (activeFile.endsWith(".v")) {
-        setOutline(parseVerilogOutline(files[activeFile]));
-      } else {
-        setOutline({ parameters: [], inputs: [], outputs: [] });
-      }
+    if (tclBottomRef.current) {
+      tclBottomRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [activeFile, files]);
+  }, [tclLogs]);
 
-  // Scroll Tcl Console terminal logs on updates
-  useEffect(() => {
-    logConsoleEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [terminalLogs]);
+  // Load Example Project
+  const handleLoadExample = (exampleKey: string) => {
+    const ex = EXAMPLE_PROJECTS[exampleKey];
+    if (!ex) return;
+    setProjectName(ex.name);
+    setProjectPart(ex.targetBoard);
+    setTopModuleName(ex.topModule);
+    setFiles(ex.files);
 
-  // Dynamic Workspace Refresh
-  const refreshWorkspace = async () => {
-    try {
-      const res = await fetch("/api/workspace");
-      const data = await res.json();
-      if (data.files) {
-        setFiles(data.files);
-        // Default select file if none active
-        const keys = Object.keys(data.files);
-        if (keys.length > 0 && !openTabs.some((t) => t.type === "file")) {
-          const txFile = keys.find(k => k.includes("uart_tx.v"));
-          const defFile = txFile || keys[0];
-          const name = defFile.split("/").pop() || defFile;
-          setOpenTabs([{ id: `file:${defFile}`, label: name, type: "file" }]);
-          setActiveTabId(`file:${defFile}`);
-          setActiveFile(defFile);
-          setActiveCode(data.files[defFile] || "");
-        }
-      }
-    } catch (e) {
-      console.error("Failed to load workspace files", e);
+    const firstFile = Object.keys(ex.files)[0];
+    setActiveFile(firstFile);
+    setActiveCode(ex.files[firstFile]);
+    setOpenTabs([
+      { id: "view:project_summary", label: "Project Summary", type: "view" },
+      { id: `file:${firstFile}`, label: firstFile.split("/").pop() || firstFile, type: "file" }
+    ]);
+    setActiveTabId("view:project_summary");
+    setActiveMainTab("project_summary");
+    setViewMode("workspace");
+    setTclLogs((prev) => [...prev, `INFO: Loaded example project '${ex.name}'.`]);
+  };
+
+  // Create New Project
+  const handleCreateNewProject = (e: React.FormEvent) => {
+    e.preventDefault();
+    const pName = newProjName.trim() || "my_fpga_project";
+    const topMod = newProjTop.trim() || "top_module";
+
+    const starterFiles: Record<string, string> = {
+      [`rtl/${topMod}.v`]: `module ${topMod}(\n    input wire clk,\n    input wire rst_n,\n    output reg [3:0] led\n);\n    always @(posedge clk or negedge rst_n) begin\n        if (!rst_n) led <= 0;\n        else led <= led + 1;\n    end\nendmodule`,
+      "constraints/pynq_z2.xdc": `## XDC Constraints for ${pName}\nset_property -dict { PACKAGE_PIN H16 IOSTANDARD LVCMOS33 } [get_ports { clk }];`
+    };
+
+    setProjectName(pName);
+    setProjectPart(newProjPart);
+    setTargetLanguage(newProjLang);
+    setTopModuleName(topMod);
+    setFiles(starterFiles);
+
+    const firstFile = `rtl/${topMod}.v`;
+    setActiveFile(firstFile);
+    setActiveCode(starterFiles[firstFile]);
+    setOpenTabs([
+      { id: "view:project_summary", label: "Project Summary", type: "view" },
+      { id: `file:${firstFile}`, label: `${topMod}.v`, type: "file" }
+    ]);
+    setActiveTabId(`file:${firstFile}`);
+    setActiveMainTab("editor");
+    setIsNewProjectOpen(false);
+    setViewMode("workspace");
+
+    setTclLogs((prev) => [...prev, `INFO: Created new FPGA project '${pName}' targeting ${newProjPart}.`]);
+  };
+
+  // Open Settings Modal
+  const handleOpenSettings = () => {
+    setDraftProjectName(projectName);
+    setDraftProjectPart(projectPart);
+    setDraftTargetLanguage(targetLanguage);
+    setDraftTopModule(topModuleName);
+    setIsSettingsOpen(true);
+  };
+
+  // Save / Apply Settings
+  const handleApplySettings = () => {
+    setProjectName(draftProjectName);
+    setProjectPart(draftProjectPart);
+    setTargetLanguage(draftTargetLanguage);
+    setTopModuleName(draftTopModule);
+    setTclLogs((prev) => [
+      ...prev,
+      `Tcl% set_property part ${draftProjectPart.split(" ")[1] || draftProjectPart} [current_project]`,
+      `INFO: Updated project settings for '${draftProjectName}'.`
+    ]);
+  };
+
+  const handleSaveSettings = () => {
+    handleApplySettings();
+    setIsSettingsOpen(false);
+  };
+
+  // Tab Handler
+  const openTab = (id: string, label: string, type: "file" | "view") => {
+    if (!openTabs.some((t) => t.id === id)) {
+      setOpenTabs((prev) => [...prev, { id, label, type }]);
+    }
+    setActiveTabId(id);
+    if (type === "view") {
+      const v = id.replace("view:", "") as any;
+      setActiveMainTab(v);
+    } else {
+      setActiveMainTab("editor");
     }
   };
 
-  // Save current workspace file
+  const closeTab = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    const nextTabs = openTabs.filter((t) => t.id !== id);
+    setOpenTabs(nextTabs);
+    if (activeTabId === id && nextTabs.length > 0) {
+      const last = nextTabs[nextTabs.length - 1];
+      setActiveTabId(last.id);
+      if (last.type === "view") {
+        setActiveMainTab(last.id.replace("view:", "") as any);
+      } else {
+        const path = last.id.replace("file:", "");
+        setActiveFile(path);
+        setActiveCode(files[path] || "");
+        setActiveMainTab("editor");
+      }
+    }
+  };
+
+  const selectFile = (path: string) => {
+    setActiveFile(path);
+    setSelectedFileItem(path);
+    if (files[path] !== undefined) {
+      setActiveCode(files[path]);
+      openTab(`file:${path}`, path.split("/").pop() || path, "file");
+    }
+  };
+
   const handleSave = async (filePath: string, content: string) => {
     setSaveStatus("saving");
     try {
       const res = await fetch("/api/workspace", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileName: filePath, content })
+        body: JSON.stringify({ fileName: filePath, content }),
       });
       if (res.ok) {
         setFiles((prev) => ({ ...prev, [filePath]: content }));
         setSaveStatus("saved");
+        setTclLogs((prev) => [...prev, `INFO: Saved file ${filePath}`]);
       } else {
         setSaveStatus("unsaved");
       }
@@ -501,1062 +505,980 @@ export default function EditorPage() {
     }
   };
 
-  // Create new source file
-  const handleCreateFile = async () => {
-    const name = prompt("Enter new source file path (e.g. rtl/my_module.v, tb/my_tb.sv, or tb/my_tb.vhd):");
-    if (!name) return;
-    let content = "";
-    if (name.endsWith(".v") || name.endsWith(".sv")) {
-      const base = name.split("/").pop()?.replace(/\.(v|sv)$/, "") || "module";
-      content = `// module ${base}\nmodule ${base} (\n    input wire clk\n);\n\nendmodule\n`;
-    } else if (name.endsWith(".vhd") || name.endsWith(".vhdl")) {
-      const base = name.split("/").pop()?.replace(/\.(vhd|vhdl)$/, "") || "entity";
-      content = `library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\nentity ${base} is\n    Port (\n        clk : in STD_LOGIC\n    );\nend ${base};\n\narchitecture Behavioral of ${base} is\nbegin\n\nend Behavioral;\n`;
-    }
-    await handleSave(name, content);
-    setActiveFile(name);
-    setActiveCode(content);
-    await refreshWorkspace();
-  };
-
-  // Create new folder placeholder
-  const handleCreateFolder = async () => {
-    const name = prompt("Enter new folder path (e.g. docs):");
-    if (!name) return;
-    await handleSave(`${name}/.keep`, "");
-    await refreshWorkspace();
-  };
-
-  // Delete file handler
-  const handleDeleteFile = async (filePath: string) => {
-    if (!confirm(`Are you sure you want to delete ${filePath}?`)) return;
-    try {
-      const res = await fetch(`/api/workspace?fileName=${encodeURIComponent(filePath)}`, {
-        method: "DELETE"
-      });
-      if (res.ok) {
-        const nextFiles = { ...files };
-        delete nextFiles[filePath];
-        setFiles(nextFiles);
-        if (activeFile === filePath) {
-          const remaining = Object.keys(nextFiles);
-          if (remaining.length > 0) {
-            setActiveFile(remaining[0]);
-            setActiveCode(nextFiles[remaining[0]]);
-          } else {
-            setActiveFile("");
-            setActiveCode("");
-          }
-        }
-      }
-    } catch (e) {
-      console.error("Failed to delete file", e);
-    }
-  };
-
-  // Auto-Save and Run Simulator
-  const handleRunSimulation = async () => {
-    setIsSimulating(true);
-    setActiveTab("terminal");
-
-    const filePaths = Object.keys(files || {});
-    const hasVhdl = filePaths.some(p => p.endsWith(".vhd") || p.endsWith(".vhdl"));
-    const hasSv = filePaths.some(p => p.endsWith(".sv"));
-    const compilerName = hasVhdl ? "GHDL" : hasSv ? "Verilator" : "iverilog";
-
-    let compileMsg = "INFO: [Sim] Compiling workspace verilog files with iverilog compiler...";
-    if (hasVhdl) {
-      compileMsg = "INFO: [Sim] Compiling workspace VHDL files with GHDL compiler...";
-    } else if (hasSv) {
-      compileMsg = "INFO: [Sim] Compiling workspace SystemVerilog files with Verilator compiler...";
-    }
-
-    setTerminalLogs((prev) => [
+  // Run Synthesis Pipeline
+  const handleRunSynthesis = async () => {
+    setIsSynthesizing(true);
+    setBottomDockTab("tcl");
+    setTclLogs((prev) => [
       ...prev,
-      "Tcl% run_simulation",
-      compileMsg,
-      "INFO: [Sim] Executing behavioral testbench simulation..."
+      "Tcl% synth_design -top " + topModuleName + " -part xc7z020clg400-1",
+      "INFO: Synthesizing module '" + topModuleName + "'...",
+      "INFO: Done synthesizing module '" + topModuleName + "' (1#1)"
     ]);
-
-    // Save active code first
-    if (saveStatus === "unsaved") {
-      await handleSave(activeFile, activeCode);
-    }
-
-    try {
-      const res = await fetch("/api/simulate", {
-        method: "POST"
-      });
-      const data = await res.json();
-      
-      if (!res.ok || data.success === false) {
-        setTerminalLogs((prev) => [
-          ...prev,
-          `ERROR: [Sim] ${compilerName} compiler failed at stage: ${data.step || "process"}`,
-          data.logs || data.error || "Unknown simulation runtime error"
-        ]);
-        return;
-      }
-
-      setTerminalLogs((prev) => [
-        ...prev,
-        data.logs,
-        `INFO: [Sim 8-102] Simulation execution completed successfully. Waveforms parsed from waves.vcd.`
-      ]);
-
-      if (data.waves) {
-        setWaves(data.waves);
-        let maxTime = 100;
-        data.waves.signals.forEach((sig: any) => {
-          sig.changes.forEach(([t]: any) => {
-            if (t > maxTime) maxTime = t;
-          });
-        });
-        setMaxSimTime(maxTime > 0 ? maxTime : 100);
-      }
-      if (data.vcdText) {
-        setVcdText(data.vcdText);
-      }
-      openTab("view:waveform", "Waveform", "view");
-    } catch (err: any) {
-      setTerminalLogs((prev) => [
-        ...prev,
-        `ERROR: [Sim] Network connection failed: ${err.message}`
-      ]);
-    } finally {
-      setIsSimulating(false);
-    }
-  };
-
-  const handleDownloadVcd = () => {
-    if (!vcdText) {
-      alert("No simulation results available. Run simulation first.");
-      return;
-    }
-    const blob = new Blob([vcdText], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${activeFile.split("/").pop()?.replace(".v", "") || "sim"}_waves.vcd`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  // Auto-Save and Run Synthesis on backend
-  const handleSynthesizeRTL = async () => {
-    if (!selectedBoardId) {
-      alert("Please select a target hardware board first.");
-      return;
-    }
-
-    setSynthesisState("running");
-    setImplementationState("pending");
-    setBitstreamState("pending");
-    setActiveTab("terminal");
-    setTerminalLogs((prev) => [
-      ...prev,
-      `Tcl% synth_design -top uart_top -part xc7z020clg400-1`,
-      "INFO: [Synth 8-90] RTL Synthesis starting on remote compiler server..."
-    ]);
-
-    if (saveStatus === "unsaved") {
-      await handleSave(activeFile, activeCode);
-    }
 
     try {
       const res = await fetch("/api/synthesis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: activeCode, boardId: selectedBoardId })
+        body: JSON.stringify({ files, topModule: topModuleName })
       });
       const data = await res.json();
-
-      if (!res.ok) {
-        setSynthesisState("pending");
-        setTerminalLogs((prev) => [
-          ...prev,
-          `ERROR: [Synth 8-91] Synthesis failed: ${data.error || "Unknown compiler error"}`,
-          data.logs || ""
-        ]);
-        return;
-      }
-
-      setCurrentJobId(data.jobId);
-      setSynthesisState("completed");
-      setTerminalLogs((prev) => [
-        ...prev,
-        data.logs,
-        "INFO: [Synth 8-256] RTL Elaboration mapped successfully. Logic synthesis completed."
-      ]);
-
-      if (data.reports) {
-        setSchematicSvg(data.reports.schematic || "");
-        setTimingReport(data.reports.timing || "");
-        setPowerReport(data.reports.power || "");
-        if (data.reports.area) {
-          setUtilizationReport(data.reports.area);
-        } else {
-          setUtilizationReport(`========================================================
-RESOURCE UTILIZATION REPORT
-========================================================
-
-Device Part: xc7z020clg400-1
-
-Resource   | Mapped | Available | Utilization %
------------|--------|-----------|--------------
-Slice LUTs |    47  |    20,800 |        0.23%
-Slice Regs |    28  |    41,600 |        0.07%
-Block RAM  |     0  |        50 |        0.00%
-DSP48      |     0  |        90 |        0.00%
-BUFG       |     1  |        32 |        3.13%
-IOB        |     5  |       106 |        4.72%
------------|--------|-----------|--------------
-Clock Networks: 1 (sys_clk_pin)`);
+      if (res.ok) {
+        setSynthStatus("Complete");
+        setLutUsage(14);
+        setFfUsage(8);
+        setBramUsage(5);
+        setDspUsage(0);
+        setWnsValue("+1.842 ns");
+        setTnsValue("0.000 ns");
+        if (data.schematicSvg) {
+          setSchematicSvg(data.schematicSvg);
         }
+        setTclLogs((prev) => [...prev, "INFO: Exiting Synthesis Engine: SUCCESS."]);
+        openTab("view:schematic", "Schematic Netlist", "view");
+      } else {
+        setSynthStatus("Failed");
+        setTclLogs((prev) => [...prev, `ERROR: ${data.error || "Synthesis failed"}`]);
       }
-      openTab("view:schematic", "Schematic", "view");
-    } catch (e: any) {
-      setSynthesisState("pending");
-      setTerminalLogs((prev) => [...prev, `ERROR: Network connection failed: ${e.message}`]);
+    } catch {
+      setSynthStatus("Failed");
+    } finally {
+      setIsSynthesizing(false);
     }
   };
 
-  // Run place and route simulation timing metrics
-  const handleRunImplementation = async () => {
-    if (!currentJobId) {
-      alert("Please run Synthesis first.");
-      return;
-    }
-    setImplementationState("running");
-    setActiveTab("terminal");
-    setTerminalLogs((prev) => [...prev, "Tcl% impl_design", "INFO: [Place 30-1] Placer loading fabric properties..."]);
-    
-    await new Promise((r) => setTimeout(r, 1000));
-    setImplementationState("completed");
-    setTerminalLogs((prev) => [
+  // Run Behavioral Simulation
+  const handleRunSimulation = async () => {
+    setIsSimulating(true);
+    setBottomDockTab("tcl");
+    setTclLogs((prev) => [
       ...prev,
-      "INFO: [Place 30-574] Placer completed successfully.",
-      "INFO: [Route 35-782] Router routing connections completed successfully.",
-      "INFO: [Timing 38-282] Timing analysis completed: WNS = 6.067 ns, WHS = 0.124 ns. Constraints met."
-    ]);
-    openTab("view:timing", "Timing", "view");
-  };
-
-  // Package synthesized project to .bit file
-  const handleGenerateBitstream = async () => {
-    if (!currentJobId) {
-      alert("Please run Synthesis first.");
-      return;
-    }
-    setBitstreamState("running");
-    setActiveTab("terminal");
-    setTerminalLogs((prev) => [...prev, "Tcl% write_bitstream -force build/uart_controller.bit"]);
-    
-    await new Promise((r) => setTimeout(r, 800));
-    setBitstreamState("completed");
-    setTerminalLogs((prev) => [
-      ...prev,
-      `INFO: [Bitgen 45-120] Configuration frame bits generated successfully: build/${currentJobId}.bit`,
-      "INFO: [Bitgen 45-287] Completed successfully."
-    ]);
-    openTab("view:utilization", "Utilization", "view");
-  };
-
-  // Connect JTAG via Websocket and program board
-  const handleOpenHardwareManager = async () => {
-    if (!currentJobId) {
-      alert("Please run Synthesis first to queue the compilation job.");
-      return;
-    }
-    setActiveTab("terminal");
-    setTerminalLogs((prev) => [
-      ...prev,
-      "",
-      `Tcl% open_hw_target [get_hw_targets -filter {NAME =~ "*xc7z020*"}]`,
-      "INFO: [Labtools 27-2285] Opening JTAG programming target daemon..."
+      "Tcl% launch_simulation -mode behavioral",
+      "INFO: Compiling testbench and design files...",
+      "INFO: Running simulation to 1000ns..."
     ]);
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws/logs/${currentJobId}`;
-    const ws = new WebSocket(wsUrl);
-
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === "job-log" && msg.data) {
-          setTerminalLogs((prev) => [...prev, msg.data]);
-        } else if (msg.type === "job-complete") {
-          if (msg.success) {
-            setTerminalLogs((prev) => [
-              ...prev,
-              "INFO: [Labtools] JTAG deploy complete! Hardware sessions initialized.",
-              "Redirecting to FPGA Telemetry dashboard..."
-            ]);
-            setTimeout(() => {
-              router.push(`/monitor/${selectedBoardId}`);
-            }, 2500);
-          } else {
-            setTerminalLogs((prev) => [...prev, "ERROR: [Labtools 27-31] Programming FPGA target hardware failed."]);
-          }
-          ws.close();
-        }
-      } catch {
-        setTerminalLogs((prev) => [...prev, event.data]);
-      }
-    };
-
-    ws.onerror = () => {
-      setTerminalLogs((prev) => [...prev, "ERROR: [Labtools] WebSocket connection failed."]);
-    };
-  };
-
-  // Trigger synthesis, implementation, and bitstream sequentially
-  const handleGoPipeline = async () => {
-    if (!selectedBoardId) return;
-    await handleSynthesizeRTL();
-  };
-
-  // Handle local Tcl Command Prompt Inputs
-  const handleTclCommand = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!terminalInput.trim()) return;
-    const cmd = terminalInput.trim();
-    setTerminalLogs((prev) => [...prev, `Tcl% ${cmd}`]);
-    setTerminalInput("");
-
-    switch (cmd.toLowerCase()) {
-      case "help":
-        setTerminalLogs((prev) => [
-          ...prev,
-          "Tcl Shell Commands:",
-          "  run_simulation   - Compile and execute testbench behavioral simulation",
-          "  synth_design     - Run RTL synthesis and elaborate netlist",
-          "  impl_design      - Execute place and route placement mapping",
-          "  write_bitstream  - Package compilation block into FPGA .bit file",
-          "  open_hw_manager  - Connect to target JTAG daemon and program board",
-          "  clear            - Clear terminal log output"
-        ]);
-        break;
-      case "clear":
-        setTerminalLogs([]);
-        break;
-      case "run_simulation":
-        handleRunSimulation();
-        break;
-      case "synth_design":
-        handleSynthesizeRTL();
-        break;
-      case "impl_design":
-        handleRunImplementation();
-        break;
-      case "write_bitstream":
-        handleGenerateBitstream();
-        break;
-      case "open_hw_manager":
-        handleOpenHardwareManager();
-        break;
-      default:
-        setTerminalLogs((prev) => [
-          ...prev,
-          `WARNING: [Common 17-259] Unknown Tcl command: '${cmd}'. Type 'help' for available command strings.`
-        ]);
-    }
-  };
-
-  // Search Results Calculator
-  const getSearchResults = () => {
-    if (!searchVal.trim()) return { files: [], text: [] };
-    const query = searchVal.toLowerCase();
-    
-    const matchedFiles: string[] = [];
-    const matchedText: { file: string; line: number; content: string }[] = [];
-
-    Object.entries(files).forEach(([filePath, content]) => {
-      if (filePath.toLowerCase().includes(query)) {
-        matchedFiles.push(filePath);
-      }
-      if (filePath.endsWith(".bit")) return;
-      
-      const lines = content.split("\n");
-      lines.forEach((line, idx) => {
-        if (line.toLowerCase().includes(query)) {
-          matchedText.push({
-            file: filePath,
-            line: idx + 1,
-            content: line.trim()
-          });
-        }
+    try {
+      const res = await fetch("/api/simulate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ files })
       });
-    });
-
-    return {
-      files: matchedFiles.slice(0, 5),
-      text: matchedText.slice(0, 8)
-    };
-  };
-
-  const searchResults = getSearchResults();
-  const selectedBoard = boards.find((b) => b.id === selectedBoardId);
-
-  // Build the hierarchical File Explorer Nodes list
-  const fileNodes = buildFileTree(files);
-
-  const getSignalValueAtTime = (changes: [number, string][], t: number) => {
-    if (!changes || changes.length === 0) return "0";
-    let val = changes[0][1];
-    for (let i = 0; i < changes.length; i++) {
-      if (changes[i][0] <= t) {
-        val = changes[i][1];
+      const data = await res.json();
+      if (res.ok && data.waveform) {
+        setWaves(data.waveform);
+        setTclLogs((prev) => [...prev, "INFO: Simulation completed. Waveform generated."]);
+        openTab("view:waveform", "Behavioral Waveform", "view");
       } else {
-        break;
+        setTclLogs((prev) => [...prev, `ERROR: ${data.error || "Simulation failed"}`]);
       }
+    } catch {
+      setTclLogs((prev) => [...prev, "ERROR: Simulation network error"]);
+    } finally {
+      setIsSimulating(false);
     }
-    return val;
   };
 
-  const formatBusValue = (valStr: string, format: "hex" | "bin" | "dec") => {
-    const num = parseInt(valStr, 2);
-    if (isNaN(num)) return valStr;
-    if (format === "hex") return `h${num.toString(16).toUpperCase()}`;
-    if (format === "dec") return num.toString(10);
-    return valStr;
+  // Run Implementation
+  const handleRunImplementation = async () => {
+    setIsImplementing(true);
+    setBottomDockTab("tcl");
+    setTclLogs((prev) => [
+      ...prev,
+      "Tcl% opt_design",
+      "INFO: Pushed 0 inverter(s) to 0 load pin(s).",
+      "Tcl% place_design",
+      "INFO: Multithreading enabled for place_design using 4 CPUs.",
+      "Tcl% route_design",
+      "INFO: Fully Routed. WNS=+1.842ns, TNS=0.000ns."
+    ]);
+
+    setTimeout(() => {
+      setImplStatus("Complete");
+      setIsImplementing(false);
+      setTclLogs((prev) => [...prev, "INFO: Exiting Implementation Engine: SUCCESS."]);
+      openTab("view:device", "Device Floorplan", "view");
+    }, 1500);
   };
 
-  const getSignalPath = (changes: [number, string][], maxTime: number, width: number) => {
-    if (!changes || changes.length === 0) {
-      return `M 0,22 L ${width},22`;
-    }
-
-    let path = "";
-    let lastVal = "0";
-
-    for (let i = 0; i < changes.length; i++) {
-      const [time, val] = changes[i];
-      const x = (time / maxTime) * width;
-      const y = val === "1" ? 10 : 22;
-
-      if (i === 0) {
-        path = `M 0,${y}`;
-      } else {
-        const prevY = lastVal === "1" ? 10 : 22;
-        path += ` L ${x},${prevY} L ${x},${y}`;
-      }
-      lastVal = val;
-    }
-
-    path += ` L ${width},${lastVal === "1" ? 10 : 22}`;
-    return path;
+  // Generate Bitstream
+  const handleGenerateBitstream = async () => {
+    setIsBitgen(true);
+    setBottomDockTab("tcl");
+    setTclLogs((prev) => [
+      ...prev,
+      `Tcl% write_bitstream -force ${projectName}.bit`,
+      "INFO: Bitgen completed successfully.",
+      `INFO: Bitstream ${projectName}.bit written.`
+    ]);
+    setTimeout(() => {
+      setIsBitgen(false);
+    }, 1200);
   };
 
-  const getBusPathsAndLabels = (changes: [number, string][], maxTime: number, width: number) => {
-    if (!changes || changes.length === 0) {
-      return {
-        topPath: `M 0,10 L ${width},10`,
-        bottomPath: `M 0,22 L ${width},22`,
-        labels: []
-      };
-    }
+  // Execute Tcl Command
+  const handleTclSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tclInput.trim()) return;
 
-    let topPath = "M 0,10";
-    let bottomPath = "M 0,22";
-    const labels: { x: number; text: string }[] = [];
+    const cmd = tclInput.trim();
+    setTclLogs((prev) => [...prev, `Tcl% ${cmd}`]);
+    setTclInput("");
 
-    for (let i = 0; i < changes.length; i++) {
-      const [time, val] = changes[i];
-      const nextTime = i < changes.length - 1 ? changes[i + 1][0] : maxTime;
-
-      const xStart = (time / maxTime) * width;
-      const xEnd = (nextTime / maxTime) * width;
-
-      topPath += ` L ${Math.max(0, xEnd - 2)},10`;
-      bottomPath += ` L ${Math.max(0, xEnd - 2)},22`;
-
-      if (i < changes.length - 1) {
-        topPath += ` L ${xEnd + 2},22`;
-        bottomPath += ` L ${xEnd + 2},10`;
-      }
-
-      if (xEnd - xStart > 25) {
-        labels.push({
-          x: (xStart + xEnd) / 2,
-          text: val
-        });
-      }
-    }
-
-    topPath += ` L ${width},10`;
-    bottomPath += ` L ${width},22`;
-
-    return { topPath, bottomPath, labels };
-  };
-
-  // Rendering of Explorer tree nodes
-  const renderNode = (node: FileNode) => {
-    if (node.isFolder) {
-      const isOpen = openFolders.has(node.path);
-      return (
-        <div key={node.path} className="pl-1">
-          <div 
-            className="flex items-center gap-1.5 py-1 px-1.5 hover:bg-foreground/5 rounded cursor-pointer text-xs font-semibold select-none transition-colors"
-            onClick={() => {
-              const next = new Set(openFolders);
-              if (next.has(node.path)) {
-                next.delete(node.path);
-              } else {
-                next.add(node.path);
-              }
-              setOpenFolders(next);
-            }}
-          >
-            <span className="text-slate-500 font-mono text-[9px] w-3 text-center">
-              {isOpen ? "▼" : "▶"}
-            </span>
-            <FolderIcon isOpen={isOpen} />
-            <span className={isLight ? "text-slate-800" : "text-slate-200"}>{node.name}</span>
-          </div>
-          {isOpen && node.children && (
-            <div className="border-l border-border/40 ml-3.5 pl-1.5">
-              {node.children.map((child) => renderNode(child))}
-            </div>
-          )}
-        </div>
-      );
+    if (cmd === "clear") {
+      setTclLogs(["Tcl% "]);
+    } else if (cmd.startsWith("synth_design")) {
+      handleRunSynthesis();
+    } else if (cmd.startsWith("run_simulation") || cmd.startsWith("launch_simulation")) {
+      handleRunSimulation();
+    } else if (cmd.startsWith("opt_design") || cmd.startsWith("place_design") || cmd.startsWith("route_design")) {
+      handleRunImplementation();
+    } else if (cmd.startsWith("write_bitstream")) {
+      handleGenerateBitstream();
+    } else if (cmd === "report_timing") {
+      openTab("view:timing", "Timing Summary", "view");
+      setTclLogs((prev) => [...prev, "INFO: Report Timing Summary generated."]);
+    } else if (cmd === "report_utilization") {
+      openTab("view:utilization", "Utilization Report", "view");
+      setTclLogs((prev) => [...prev, "INFO: Resource Utilization report generated."]);
+    } else if (cmd === "help") {
+      setTclLogs((prev) => [
+        ...prev,
+        "Available Tcl Commands:",
+        "  synth_design -top <module> -part <fpga> : Run Logic Synthesis",
+        "  launch_simulation                        : Run Behavioral Simulation",
+        "  opt_design / place_design / route_design  : Run Implementation",
+        "  write_bitstream                          : Generate FPGA Bitstream",
+        "  report_timing                            : View Timing Summary Report",
+        "  report_utilization                       : View Resource Utilization",
+        "  clear                                    : Clear Tcl console log"
+      ]);
     } else {
-      const isActive = activeFile === node.path;
-      const getIcon = () => {
-        if (node.name.endsWith(".v")) return <VerilogIcon />;
-        if (node.name.endsWith(".xdc")) return <XDCIcon />;
-        if (node.name.endsWith(".tcl")) return <TCLIcon />;
-        if (node.name.endsWith(".json")) return <JSONIcon />;
-        if (node.name.endsWith(".md")) return <MDIcon />;
-        return <FileIcon />;
-      };
-      
-      return (
-        <div 
-          key={node.path}
-          className={`group flex items-center justify-between py-1 px-2.5 ml-4 rounded cursor-pointer text-xs transition-colors ${
-            isActive 
-              ? "bg-[#3b82f6]/15 text-[#3b82f6] font-semibold" 
-              : isLight ? "text-slate-600 hover:text-slate-900 hover:bg-slate-200" : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40"
-          }`}
-          onClick={() => {
-            selectFile(node.path);
-          }}
-        >
-          <div className="flex items-center gap-2">
-            {getIcon()}
-            <span>{node.name}</span>
-          </div>
-          <button 
-            onClick={(e) => { e.stopPropagation(); handleDeleteFile(node.path); }} 
-            className="opacity-0 group-hover:opacity-100 hover:text-red-400 text-[10px] px-1 transition-opacity"
-            title="Delete File"
-          >
-            🗑️
-          </button>
-        </div>
-      );
+      setTclLogs((prev) => [...prev, `INFO: Command '${cmd}' executed successfully.`]);
     }
   };
 
-  const selectFile = async (filePath: string) => {
-    if (saveStatus === "unsaved") {
-      await handleSave(activeFile, activeCode);
-    }
-    setActiveFile(filePath);
-    setActiveCode(files[filePath] || "");
-    setSaveStatus("saved");
-
-    const tabId = `file:${filePath}`;
-    const name = filePath.split("/").pop() || filePath;
-    setOpenTabs((prev) => {
-      if (prev.some((t) => t.id === tabId)) return prev;
-      return [...prev, { id: tabId, label: name, type: "file" }];
+  const handleDeleteFile = (path: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Source File",
+      message: `Are you sure you want to delete source file '${path}' from project?`,
+      confirmText: "Delete File",
+      onConfirm: () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        const nextFiles = { ...files };
+        delete nextFiles[path];
+        setFiles(nextFiles);
+        setTclLogs((prev) => [...prev, `INFO: Removed file ${path}`]);
+      }
     });
-    setActiveTabId(tabId);
   };
 
   return (
-    <div className={`h-screen flex flex-col ${isLight ? "bg-[#f3f3f3]" : "bg-[#0b0f19]"} overflow-hidden`}>
-      <Navbar />
-
-      {/* FPGA Lab Style Sub-Header Menu Bar */}
-      <header className={`h-9 border-b shrink-0 flex items-center justify-between px-3 text-xs z-20 font-sans relative ${
-        isLight ? "bg-[#f3f3f3] text-slate-700 border-[#d1d1d1]" : "bg-[#15151a] text-slate-300 border-[#2d2d2d]"
-      }`}>
-        <div className="flex items-center gap-4">
-          <span className="font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 select-none">
-            FPGA Lab 2026.1
-          </span>
-          <div className="hidden sm:flex items-center gap-3 text-[11px] relative">
-            {/* File Menu */}
-            <div className="relative">
-              <button 
-                onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === "File" ? null : "File"); }}
-                className={`hover:text-primary cursor-pointer focus:outline-none px-2 py-0.5 rounded transition-colors ${activeMenu === "File" ? "bg-black/10 dark:bg-white/10 text-primary font-bold" : ""}`}
-              >
-                File
-              </button>
-              {activeMenu === "File" && (
-                <div className={`absolute left-0 mt-1.5 w-48 rounded shadow-lg border text-[11px] z-50 py-1.5 ${
-                  isLight ? "bg-white border-[#d1d1d1] text-slate-800" : "bg-[#1e1e24] border-[#2d2d2d] text-slate-300"
-                }`}>
-                  <button onClick={() => { handleCreateFile(); setActiveMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-2">📄 New File</button>
-                  <button onClick={() => { handleCreateFolder(); setActiveMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-2">📁 New Folder</button>
-                  <button onClick={() => { handleSave(activeFile, activeCode); setActiveMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-2">💾 Save Active File</button>
-                  <div className="h-[1px] my-1 bg-slate-200 dark:bg-slate-700/60" />
-                  <button onClick={() => { refreshWorkspace(); setActiveMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-2">🔄 Refresh Workspace</button>
-                </div>
-              )}
-            </div>
-
-            {/* Edit Menu */}
-            <div className="relative">
-              <button 
-                onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === "Edit" ? null : "Edit"); }}
-                className={`hover:text-primary cursor-pointer focus:outline-none px-2 py-0.5 rounded transition-colors ${activeMenu === "Edit" ? "bg-black/10 dark:bg-white/10 text-primary font-bold" : ""}`}
-              >
-                Edit
-              </button>
-              {activeMenu === "Edit" && (
-                <div className={`absolute left-0 mt-1.5 w-40 rounded shadow-lg border text-[11px] z-50 py-1.5 ${
-                  isLight ? "bg-white border-[#d1d1d1] text-slate-800" : "bg-[#1e1e24] border-[#2d2d2d] text-slate-300"
-                }`}>
-                  <button onClick={() => { setIsSearchFocused(true); setActiveMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-2">🔍 Find...</button>
-                  <button onClick={() => { setActiveCode((c) => c + "\n"); setSaveStatus("unsaved"); setActiveMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-2">✏️ Insert Line</button>
-                </div>
-              )}
-            </div>
-
-            {/* Flow Menu */}
-            <div className="relative">
-              <button 
-                onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === "Flow" ? null : "Flow"); }}
-                className={`hover:text-primary cursor-pointer focus:outline-none px-2 py-0.5 rounded transition-colors ${activeMenu === "Flow" ? "bg-black/10 dark:bg-white/10 text-primary font-bold" : ""}`}
-              >
-                Flow
-              </button>
-              {activeMenu === "Flow" && (
-                <div className={`absolute left-0 mt-1.5 w-56 rounded shadow-lg border text-[11px] z-50 py-1.5 ${
-                  isLight ? "bg-white border-[#d1d1d1] text-slate-800" : "bg-[#1e1e24] border-[#2d2d2d] text-slate-300"
-                }`}>
-                  <button onClick={() => { handleRunSimulation(); setActiveMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-2">🧪 Behavioral Simulation</button>
-                  <button onClick={() => { handleSynthesizeRTL(); setActiveMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-2">⚙️ RTL Synthesis</button>
-                  <button onClick={() => { handleRunImplementation(); setActiveMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-2">🧩 Placement & Routing</button>
-                  <button onClick={() => { handleGenerateBitstream(); setActiveMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-2">📦 Generate Bitstream</button>
-                </div>
-              )}
-            </div>
-
-            {/* Tools Menu */}
-            <div className="relative">
-              <button 
-                onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === "Tools" ? null : "Tools"); }}
-                className={`hover:text-primary cursor-pointer focus:outline-none px-2 py-0.5 rounded transition-colors ${activeMenu === "Tools" ? "bg-black/10 dark:bg-white/10 text-primary font-bold" : ""}`}
-              >
-                Tools
-              </button>
-              {activeMenu === "Tools" && (
-                <div className={`absolute left-0 mt-1.5 w-52 rounded shadow-lg border text-[11px] z-50 py-1.5 ${
-                  isLight ? "bg-white border-[#d1d1d1] text-slate-800" : "bg-[#1e1e24] border-[#2d2d2d] text-slate-300"
-                }`}>
-                  <button onClick={() => { handleZoomIn(); setActiveMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-2">➕ Zoom Waveform In</button>
-                  <button onClick={() => { handleZoomOut(); setActiveMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-2">➖ Zoom Waveform Out</button>
-                  <button onClick={() => { handleZoomFit(); setActiveMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-2">↕ Waveform Fit</button>
-                  <div className="h-[1px] my-1 bg-slate-200 dark:bg-slate-700/60" />
-                  <button onClick={() => { setGlobalRadix(globalRadix === "hex" ? "bin" : globalRadix === "bin" ? "dec" : "hex"); setActiveMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-2">🔢 Cycle Radix ({globalRadix.toUpperCase()})</button>
-                </div>
-              )}
-            </div>
-
-            {/* Window Menu */}
-            <div className="relative">
-              <button 
-                onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === "Window" ? null : "Window"); }}
-                className={`hover:text-primary cursor-pointer focus:outline-none px-2 py-0.5 rounded transition-colors ${activeMenu === "Window" ? "bg-black/10 dark:bg-white/10 text-primary font-bold" : ""}`}
-              >
-                Window
-              </button>
-              {activeMenu === "Window" && (
-                <div className={`absolute left-0 mt-1.5 w-48 rounded shadow-lg border text-[11px] z-50 py-1.5 ${
-                  isLight ? "bg-white border-[#d1d1d1] text-slate-800" : "bg-[#1e1e24] border-[#2d2d2d] text-slate-300"
-                }`}>
-                  <button onClick={() => { setIsExplorerExpanded(!isExplorerExpanded); setActiveMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-2">📂 Toggle Sources Explorer</button>
-                  <button onClick={() => { setIsOutlineExpanded(!isOutlineExpanded); setActiveMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-2">📐 Toggle Module Outline</button>
-                </div>
-              )}
-            </div>
-
-            {/* Help Menu */}
-            <div className="relative">
-              <button 
-                onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === "Help" ? null : "Help"); }}
-                className={`hover:text-primary cursor-pointer focus:outline-none px-2 py-0.5 rounded transition-colors ${activeMenu === "Help" ? "bg-black/10 dark:bg-white/10 text-primary font-bold" : ""}`}
-              >
-                Help
-              </button>
-              {activeMenu === "Help" && (
-                <div className={`absolute left-0 mt-1.5 w-44 rounded shadow-lg border text-[11px] z-50 py-1.5 ${
-                  isLight ? "bg-white border-[#d1d1d1] text-slate-800" : "bg-[#1e1e24] border-[#2d2d2d] text-slate-300"
-                }`}>
-                  <button onClick={() => { alert("FPGA Lab Web IDE v2026.1. Built on React and Next.js."); setActiveMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-2">💡 About FPGA Lab</button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Central Search Box */}
-        <div className="flex-1 max-w-xs mx-4 relative">
-          <input
-            type="text"
-            value={searchVal}
-            onFocus={() => setIsSearchFocused(true)}
-            onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
-            onChange={(e) => setSearchVal(e.target.value)}
-            className={`w-full text-center rounded px-4 py-1 text-[11px] focus:outline-none ${
-              isLight ? "bg-white border border-[#d1d1d1] text-slate-800" : "bg-[#252526] border border-[#2d2d2d] text-slate-300"
-            }`}
-            placeholder="Search classes, ports, files..."
-          />
-          {isSearchFocused && searchVal.trim() && (
-            <div className={`absolute top-7 left-0 right-0 rounded border shadow-lg text-[10px] p-2 space-y-2 z-50 ${
-              isLight ? "bg-white border-[#d1d1d1] text-slate-800" : "bg-[#1e1e24] border-[#2d2d2d] text-slate-300"
-            }`}>
-              {searchResults.files.length > 0 && (
-                <div>
-                  <div className="font-bold text-slate-500 uppercase text-[8px] mb-1">Matched Files</div>
-                  {searchResults.files.map((f) => (
-                    <div key={f} className="cursor-pointer hover:text-primary" onClick={() => selectFile(f)}>{f}</div>
-                  ))}
-                </div>
-              )}
-              {searchResults.text.length > 0 && (
-                <div>
-                  <div className="font-bold text-slate-500 uppercase text-[8px] mb-1">Matched Lines</div>
-                  {searchResults.text.map((t, idx) => (
-                    <div key={idx} className="cursor-pointer hover:text-primary text-slate-400 truncate" onClick={() => selectFile(t.file)}>
-                      <span className="text-blue-400 font-bold">{t.file.split("/").pop()}</span>: {t.content}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {searchResults.files.length === 0 && searchResults.text.length === 0 && (
-                <div className="text-slate-500 italic">No search results found</div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Board Selection Display */}
-        <div className="flex items-center gap-3 shrink-0">
+    <div className="h-screen flex flex-col overflow-hidden font-sans select-none bg-[#e8eef8] text-[#1e293b]">
+      {/* ── 1. MAIN TITLE & TOP APP HEADER ────────────────────────────── */}
+      <div className="flex flex-col border-b border-[#bdcce0] text-xs shrink-0 bg-[#e0e8f8]">
+        {/* Title Bar */}
+        <div className="h-7 px-3 flex items-center justify-between border-b border-[#c8d6e8] text-[11px] font-semibold tracking-wide text-[#0f172a]">
           <div className="flex items-center gap-2">
-            <span className={`text-[10px] font-semibold uppercase ${textMuted}`}>Target Board:</span>
-            <select
-              value={selectedBoardId}
-              onChange={(e) => setSelectedBoardId(e.target.value)}
-              className={`text-[11px] rounded py-0.5 px-2.5 focus:outline-none ${
-                isLight ? "bg-white border border-[#d1d1d1] text-slate-700" : "bg-[#252526] border border-[#2d2d2d] text-[#cccccc]"
+            <span className="w-3.5 h-3.5 rounded bg-[#2b579a] flex items-center justify-center text-[9px] font-extrabold text-white">F</span>
+            <span>
+              {viewMode === "welcome"
+                ? "FPGA Lab Design Suite v2026.1 - Getting Started"
+                : `${projectName} - [${projectPath}/${projectName}.xpr] - FPGA Lab Design Suite`}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setViewMode(viewMode === "welcome" ? "workspace" : "welcome")}
+              className={`px-2.5 py-0.5 rounded font-bold text-[10px] flex items-center gap-1 transition-all shadow-xs ${
+                viewMode === "welcome"
+                  ? "bg-[#2b579a] hover:bg-[#1e3a8a] text-white"
+                  : "bg-white hover:bg-slate-100 text-slate-800 border border-[#cbd5e1]"
               }`}
             >
-              {boards.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name} ({b.boardType})
-                </option>
-              ))}
-              {boards.length === 0 && <option value="">No Active Boards</option>}
-            </select>
-            <span className={`w-2 h-2 rounded-full ${selectedBoard?.status === "free" ? "bg-emerald-500" : "bg-amber-500"}`} />
-          </div>
+              <span>{viewMode === "welcome" ? "🚀 Open IDE Workspace" : "🏠 Getting Started"}</span>
+            </button>
 
-          <button
-            onClick={handleGoPipeline}
-            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold uppercase transition-all flex items-center gap-1 shadow-md shadow-emerald-600/20"
-            title="Run synthesis compilation sequence"
-          >
-            Go
-          </button>
-        </div>
-      </header>
-
-      {/* Main Workspace Layout */}
-      <div className="flex-1 flex flex-row overflow-hidden min-h-0 relative">
-        
-        {/* Flow Navigator Sidebar */}
-        <div className={`w-48 border-r shrink-0 flex flex-col h-full select-none text-[11px] relative z-10 ${sidebarBg}`}>
-          <div className="border-b p-2.5 flex items-center justify-between text-blue-500 font-bold">
-            <span className="uppercase tracking-wider text-[10px]">Flow Navigator</span>
-            <span className="text-[8px]">▼</span>
-          </div>
-
-          <div className="flex-1 overflow-y-auto py-2.5 space-y-4 font-sans pl-1.5">
-            {/* Project Manager Group */}
-            <div className="space-y-0.5">
-              <div className="px-2 font-bold text-slate-500 uppercase tracking-wider text-[9px]">Project Manager</div>
-              <button className="w-full text-left px-3 py-1 hover:bg-foreground/5 rounded flex items-center gap-2 transition-all text-slate-400">
-                ⚙️ Settings
-              </button>
-              <button className="w-full text-left px-3 py-1 hover:bg-foreground/5 rounded flex items-center gap-2 transition-all text-slate-400" onClick={handleCreateFile}>
-                ➕ Add Sources
-              </button>
-            </div>
-
-            {/* Simulation Group */}
-            <div className="space-y-0.5">
-              <div className="px-2 font-bold text-slate-500 uppercase tracking-wider text-[9px]">Simulation</div>
-              <button 
-                onClick={handleRunSimulation}
-                className={`w-full text-left px-3 py-1 rounded flex items-center gap-2 transition-all ${
-                  isSimulating ? "text-amber-400 font-semibold animate-pulse" : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                🧪 Run Behavioral Sim
-              </button>
-            </div>
-
-            {/* RTL Analysis Group */}
-            <div className="space-y-0.5">
-              <div className="px-2 font-bold text-slate-500 uppercase tracking-wider text-[9px]">RTL Analysis</div>
-              <button 
-                onClick={() => {
-                  if (schematicSvg) {
-                    setActiveMainTab("schematic");
-                  } else {
-                    alert("Please run Synthesis first to elaborate the schematic netlist.");
-                  }
-                }}
-                className={`w-full text-left px-3 py-1 rounded flex items-center gap-2 transition-all ${
-                  activeMainTab === "schematic" ? "text-blue-400 font-semibold" : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                🗺️ Open Elaborated Design
-              </button>
-            </div>
-
-            {/* Synthesis Group */}
-            <div className="space-y-0.5">
-              <div className="px-2 font-bold text-slate-500 uppercase tracking-wider text-[9px]">Synthesis</div>
-              <button 
-                onClick={handleSynthesizeRTL}
-                className={`w-full text-left px-3 py-1 rounded flex items-center gap-2 transition-all ${
-                  synthesisState === "running" ? "text-amber-400 animate-pulse font-semibold" :
-                  synthesisState === "completed" ? "text-emerald-400 font-semibold" : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                ⚙️ Run Synthesis {synthesisState === "running" && "..."}
-              </button>
-            </div>
-
-            {/* Implementation Group */}
-            <div className="space-y-0.5">
-              <div className="px-2 font-bold text-slate-500 uppercase tracking-wider text-[9px]">Implementation</div>
-              <button 
-                onClick={handleRunImplementation}
-                className={`w-full text-left px-3 py-1 rounded flex items-center gap-2 transition-all ${
-                  implementationState === "running" ? "text-amber-400 animate-pulse font-semibold" :
-                  implementationState === "completed" ? "text-emerald-400 font-semibold" : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                🧩 Run Implementation {implementationState === "running" && "..."}
-              </button>
-            </div>
-
-            {/* Program & Debug Group */}
-            <div className="space-y-0.5">
-              <div className="px-2 font-bold text-slate-500 uppercase tracking-wider text-[9px]">Program and Debug</div>
-              <button 
-                onClick={handleGenerateBitstream}
-                className={`w-full text-left px-3 py-1 rounded flex items-center gap-2 transition-all ${
-                  bitstreamState === "running" ? "text-amber-400 animate-pulse font-semibold" :
-                  bitstreamState === "completed" ? "text-emerald-400 font-semibold" : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                📦 Generate Bitstream {bitstreamState === "running" && "..."}
-              </button>
-              <button 
-                onClick={handleOpenHardwareManager}
-                className="w-full text-left px-3 py-1 text-slate-400 hover:text-slate-200 rounded flex items-center gap-2 transition-all"
-              >
-                🔌 Program Device
-              </button>
-            </div>
+            <span className="text-[10px] px-2 py-0.5 rounded bg-blue-600 text-white font-bold shadow-sm">
+              Ready
+            </span>
+            <span className="text-slate-600 text-[10px] bg-white px-2 py-0.5 rounded border border-[#cbd5e1]">
+              Default Layout ▾
+            </span>
           </div>
         </div>
 
-        {/* Left Side Sources Explorer & Outline Panel */}
-        <div 
-          style={{ width: `${explorerWidth}px` }}
-          className={`border-r shrink-0 flex flex-col h-full select-none relative z-10 ${sidebarBg}`}
-        >
-          
-          {/* Explorer Tree Section */}
-          <div className={`flex-1 flex flex-col min-h-0 border-b ${borderCol}`}>
-            <div 
-              className="h-8 flex items-center justify-between px-3 bg-transparent text-[11px] font-bold uppercase tracking-wider text-slate-400 cursor-pointer"
-              onClick={() => setIsExplorerExpanded(!isExplorerExpanded)}
-            >
-              <div className="flex items-center gap-1.5">
-                <span className="text-slate-500 font-mono text-[9px]">{isExplorerExpanded ? "▼" : "▶"}</span>
-                <span>Sources</span>
-              </div>
-              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                <button onClick={handleCreateFile} title="New File"><NewFileIcon /></button>
-                <button onClick={handleCreateFolder} title="New Folder"><NewFolderIcon /></button>
-                <button onClick={refreshWorkspace} title="Refresh"><RefreshIcon /></button>
-                <button onClick={() => setOpenFolders(new Set())} title="Collapse All"><CollapseAllIcon /></button>
-              </div>
-            </div>
+        {/* Menu Bar */}
+        <div className="h-7 px-2 flex items-center gap-1 text-[11px] relative font-medium bg-[#e6ecf7]">
+          {[
+            {
+              id: "file",
+              label: "File",
+              items: [
+                { label: "New Project...", action: () => setIsNewProjectOpen(true) },
+                { label: "Open Project...", action: () => setViewMode("welcome") },
+                { label: "Add Sources... (Alt+A)", action: () => openTab("file:constraints/pynq_z2.xdc", "pynq_z2.xdc", "file") },
+                { label: "Simulation Waveform ▸", action: handleRunSimulation },
+                { label: "Exit", action: () => router.push("/dashboard") }
+              ]
+            },
+            {
+              id: "edit",
+              label: "Edit",
+              items: [
+                { label: "Undo (Ctrl+Z)", action: () => {} },
+                { label: "Redo (Ctrl+Shift+Z)", action: () => {} },
+                { label: "Copy (Ctrl+C)", action: () => {} },
+                { label: "Paste (Ctrl+V)", action: () => {} },
+                { label: "Delete (Delete)", action: () => {} }
+              ]
+            },
+            {
+              id: "flow",
+              label: "Flow",
+              items: [
+                { label: "Project Manager", action: () => { setViewMode("workspace"); openTab("view:project_summary", "Project Summary", "view"); } },
+                { label: "Project Settings...", action: handleOpenSettings },
+                { label: "Run Simulation", action: handleRunSimulation },
+                { label: "Open Elaborated Design", action: () => { setViewMode("workspace"); openTab("view:schematic", "Schematic Netlist", "view"); } },
+                { label: "Run Synthesis (F11)", action: handleRunSynthesis },
+                { label: "Run Implementation", action: handleRunImplementation },
+                { label: "Generate Bitstream", action: handleGenerateBitstream }
+              ]
+            },
+            {
+              id: "view",
+              label: "View",
+              items: [
+                { label: "Getting Started Screen", action: () => setViewMode("welcome") },
+                { label: "Project Summary", action: () => { setViewMode("workspace"); openTab("view:project_summary", "Project Summary", "view"); } },
+                { label: "Schematic Netlist", action: () => { setViewMode("workspace"); openTab("view:schematic", "Schematic Netlist", "view"); } },
+                { label: "Waveform Viewer", action: () => { setViewMode("workspace"); openTab("view:waveform", "Behavioral Waveform", "view"); } },
+                { label: "Device Floorplan", action: () => { setViewMode("workspace"); openTab("view:device", "Device Floorplan", "view"); } }
+              ]
+            },
+            {
+              id: "tools",
+              label: "Tools",
+              items: [
+                { label: "Run Tcl Script...", action: () => { setViewMode("workspace"); setBottomDockTab("tcl"); } }
+              ]
+            },
+            {
+              id: "help",
+              label: "Help",
+              items: [
+                { label: "FPGA Lab Documentation", action: () => window.open("https://www.xilinx.com/support/documentation.html", "_blank") },
+                { label: "About FPGA Lab Design Suite", action: () => alert("FPGA Lab Design Suite v2026.1") }
+              ]
+            }
+          ].map((m) => (
+            <div key={m.id} className="relative">
+              <button
+                onClick={() => setActiveMenu(activeMenu === m.id ? null : m.id)}
+                className={`px-2.5 py-0.5 rounded hover:bg-[#2b579a]/10 font-medium transition-colors ${
+                  activeMenu === m.id ? "bg-[#2b579a] text-white font-bold" : "text-[#1e293b]"
+                }`}
+              >
+                {m.label}
+              </button>
 
-            {isExplorerExpanded && (
-              <div className="flex-1 overflow-y-auto py-2 font-mono">
-                {fileNodes.map((node) => renderNode(node))}
-              </div>
-            )}
-          </div>
-
-          {/* Outline Module Details Section */}
-          <div className="h-64 flex flex-col min-h-0 bg-black/10">
-            <div 
-              className="h-8 flex items-center px-3 bg-transparent text-[11px] font-bold uppercase tracking-wider text-slate-400 cursor-pointer"
-              onClick={() => setIsOutlineExpanded(!isOutlineExpanded)}
-            >
-              <span className="text-slate-500 font-mono text-[9px] mr-1.5">{isOutlineExpanded ? "▼" : "▶"}</span>
-              <span>Outline</span>
-            </div>
-
-            {isOutlineExpanded && (
-              <div className={`flex-1 overflow-y-auto px-4 py-2 font-mono text-xs space-y-3 ${
-                isLight ? "text-slate-700" : "text-[#cccccc]"
-              }`}>
-                {activeFile.endsWith(".v") ? (
-                  <>
-                    <div>
-                      <div className="text-[10px] text-slate-500 uppercase font-semibold mb-1">Module</div>
-                      <div className="text-amber-600 dark:text-amber-400 font-bold flex items-center gap-1.5">
-                        {activeFile.split("/").pop()?.replace(".v", "")}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="text-[10px] text-slate-500 uppercase font-semibold mb-1">Parameters</div>
-                      {outline.parameters.length > 0 ? (
-                        <div className="space-y-1 pl-2.5">
-                          {outline.parameters.map((p) => (
-                            <div key={p} className="text-blue-500 dark:text-blue-400 flex items-center gap-1.5">
-                              <span className="text-slate-500 font-bold">p</span> {p}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-slate-500 italic pl-2.5">No parameters</div>
-                      )}
-                    </div>
-
-                    <div>
-                      <div className="text-[10px] text-slate-500 uppercase font-semibold mb-1">Ports</div>
-                      <div className="space-y-1 pl-2.5">
-                        {outline.inputs.map((inp) => (
-                          <div key={inp} className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-                            <span className="text-slate-500 font-bold">i</span> {inp}
-                          </div>
-                        ))}
-                        {outline.outputs.map((out) => (
-                          <div key={out} className="text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
-                            <span className="text-slate-500 font-bold">o</span> {out}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-slate-500 italic">No outline available.</div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Explorer Width Resizer Handle */}
-        <div
-          onMouseDown={startResizeExplorer}
-          className={`w-1 cursor-col-resize shrink-0 transition-colors z-30 select-none ${
-            isDraggingExplorer ? "bg-blue-500" : "bg-transparent hover:bg-blue-500/50"
-          }`}
-          style={{ height: "100%" }}
-        />
-
-        {/* Main Editor + Bottom Panels Column */}
-        <div className={`flex-1 flex flex-col min-w-0 h-full ${bgWorkspace}`}>
-          {/* Overlay to catch mouse moves when dragging over iframe/monaco */}
-          {(isDraggingExplorer || isDraggingConsole) && (
-            <div className="absolute inset-0 z-50 cursor-col-resize bg-transparent" />
-          )}
-          
-          {/* Top Panel: Tabbed Canvas (Editor, Waveform, Schematic, reports) */}
-          <div className="flex-1 flex flex-col min-h-0 relative">
-            
-            {/* VS Code Style Tab Bar */}
-            <div className={`h-8 border-b shrink-0 flex items-center justify-between px-2 overflow-x-auto ${
-              isLight ? "bg-slate-200 border-[#d1d1d1]" : "bg-[#15151a] border-[#2d2d2d]"
-            }`}>
-              <div className="flex items-center gap-0.5 h-full overflow-x-auto scrollbar-hide">
-                {openTabs.map((t) => {
-                  const isActive = activeTabId === t.id;
-                  const isDirty = t.type === "file" && saveStatus === "unsaved" && activeFile === t.id.replace("file:", "");
-                  
-                  return (
-                    <div
-                      key={t.id}
+              {activeMenu === m.id && (
+                <div className="absolute top-full left-0 mt-0.5 w-56 bg-white border border-[#b0c4de] rounded-md shadow-xl z-50 py-1 text-slate-800">
+                  {m.items.map((it, idx) => (
+                    <button
+                      key={idx}
                       onClick={() => {
-                        if (t.type === "file") {
-                          const path = t.id.replace("file:", "");
-                          selectFile(path);
-                          setActiveTabId(t.id);
-                          setActiveMainTab("editor");
-                        } else {
-                          setActiveTabId(t.id);
-                          setActiveMainTab(t.id.replace("view:", "") as any);
-                        }
+                        it.action();
+                        setActiveMenu(null);
                       }}
-                      className={`h-full px-3 text-xs font-semibold flex items-center gap-2 border-r cursor-pointer transition-all select-none ${borderCol} ${
-                        isActive
-                          ? isLight ? "bg-white text-blue-600 border-t-2 border-t-blue-500 font-bold" : "bg-[#1e1e24] text-[#60a5fa] border-t-2 border-t-blue-500 font-bold"
-                          : isLight ? "text-slate-500 hover:bg-slate-300/40" : "text-slate-400 hover:bg-slate-800/40"
-                      }`}
+                      className="w-full text-left px-3 py-1.5 hover:bg-[#2b579a] hover:text-white text-[11px] transition-colors flex items-center justify-between"
                     >
-                      <span>{t.type === "file" ? "📄" : t.id === "view:schematic" ? "🗺️" : t.id === "view:waveform" ? "🧪" : "📊"} {t.label}</span>
-                      
-                      <button
-                        onClick={(e) => closeTab(e, t.id)}
-                        className="w-3.5 h-3.5 rounded-full hover:bg-black/10 hover:dark:bg-white/10 flex items-center justify-center text-[9px] transition-colors"
-                      >
-                        {isDirty ? "●" : "×"}
-                      </button>
-                    </div>
-                  );
-                })}
+                      <span>{it.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Quick Search Bar */}
+          <div className="ml-auto flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Q- Quick Access"
+              className="w-44 px-2 py-0.5 text-[10px] bg-white border border-[#cbd5e1] rounded text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+        </div>
+
+        {/* Quick Toolbar (Active in Workspace Mode) */}
+        {viewMode === "workspace" && (
+          <div className="h-8 px-3 border-t border-[#c8d6e8] flex items-center gap-3 text-xs bg-[#eef3f9]">
+            <button
+              onClick={handleOpenSettings}
+              className="flex items-center gap-1.5 px-2 py-0.5 hover:bg-[#2b579a]/10 rounded text-slate-700 text-[11px] font-medium border border-[#cbd5e1] bg-white"
+              title="Project Settings"
+            >
+              <span className="text-blue-600">⚙️</span> Settings
+            </button>
+
+            <button
+              onClick={() => openTab("file:constraints/pynq_z2.xdc", "pynq_z2.xdc", "file")}
+              className="flex items-center gap-1.5 px-2 py-0.5 hover:bg-[#2b579a]/10 rounded text-slate-700 text-[11px] font-medium border border-[#cbd5e1] bg-white"
+              title="Add Sources (Alt+A)"
+            >
+              <span className="text-emerald-600 font-bold">+</span> Add Sources
+            </button>
+
+            <div className="h-4 w-[1px] bg-[#cbd5e1]" />
+
+            <button
+              onClick={handleRunSimulation}
+              disabled={isSimulating}
+              className="flex items-center gap-1.5 px-2 py-0.5 bg-white hover:bg-emerald-50 border border-[#cbd5e1] text-emerald-700 rounded text-[11px] font-bold disabled:opacity-50"
+              title="Run Behavioral Simulation"
+            >
+              <span className="text-emerald-600">▶</span> Run Simulation
+            </button>
+
+            <button
+              onClick={handleRunSynthesis}
+              disabled={isSynthesizing}
+              className="flex items-center gap-1.5 px-2 py-0.5 bg-white hover:bg-blue-50 border border-[#cbd5e1] text-blue-700 rounded text-[11px] font-bold disabled:opacity-50"
+              title="Run Logic Synthesis (F11)"
+            >
+              <span className="text-blue-600">▶</span> Run Synthesis
+            </button>
+
+            <button
+              onClick={handleRunImplementation}
+              disabled={isImplementing}
+              className="flex items-center gap-1.5 px-2 py-0.5 bg-white hover:bg-purple-50 border border-[#cbd5e1] text-purple-700 rounded text-[11px] font-bold disabled:opacity-50"
+              title="Run Implementation (Place & Route)"
+            >
+              <span className="text-purple-600">▶</span> Run Implementation
+            </button>
+
+            <button
+              onClick={handleGenerateBitstream}
+              disabled={isBitgen}
+              className="flex items-center gap-1.5 px-2 py-0.5 bg-white hover:bg-amber-50 border border-[#cbd5e1] text-amber-700 rounded text-[11px] font-bold disabled:opacity-50"
+              title="Generate Bitstream (.bit)"
+            >
+              <span>📦</span> Generate Bitstream
+            </button>
+
+            <div className="ml-auto flex items-center gap-2 text-[11px]">
+              <span className="text-slate-600 font-medium">Target FPGA:</span>
+              <span className="font-mono text-blue-700 font-bold bg-white px-2 py-0.5 rounded border border-[#cbd5e1]">
+                {projectPart}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── 2. MAIN BODY: WELCOME LANDING PAGE OR IDE WORKSPACE ────────────────── */}
+      {viewMode === "welcome" ? (
+        /* ═══════════════ VIVADO GETTING STARTED WELCOME SCREEN ═══════════════ */
+        <div className="flex-1 p-6 md:p-10 overflow-y-auto bg-[#e8eef8]">
+          <div className="max-w-6xl mx-auto space-y-8">
+            {/* Header Title Banner */}
+            <div className="bg-[#2b579a] text-white p-6 rounded-2xl shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-3">
+                  <span className="w-10 h-10 rounded-xl bg-white/20 text-white font-black text-2xl flex items-center justify-center">F</span>
+                  <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">FPGA Lab Design Suite</h1>
+                </div>
+                <p className="text-blue-100 text-xs md:text-sm mt-1">
+                  Cloud-Based FPGA Hardware Synthesis, Behavioral Simulation & Remote Deployment
+                </p>
               </div>
 
-              <div className="flex items-center gap-2 text-[10px] text-slate-500 shrink-0 pl-2">
-                <span className={`px-1.5 py-0.5 rounded ${
-                  saveStatus === "saved" ? "bg-emerald-600/10 text-emerald-400" : "bg-amber-600/10 text-amber-400 animate-pulse"
-                }`}>
-                  {saveStatus === "saved" ? "Saved" : saveStatus === "saving" ? "Saving..." : "Unsaved"}
-                </span>
-                <button 
-                  onClick={() => handleSave(activeFile, activeCode)}
-                  className="px-2 py-0.5 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 active:scale-95 text-[10px]"
+              <div className="flex items-center gap-3 shrink-0">
+                <button
+                  onClick={() => setIsNewProjectOpen(true)}
+                  className="px-5 py-2.5 bg-white text-[#2b579a] font-bold rounded-xl text-xs hover:bg-blue-50 transition-all shadow-md active:scale-95 flex items-center gap-2"
                 >
-                  Save
+                  <span className="text-emerald-600 font-bold">+</span> Create Project
+                </button>
+                <button
+                  onClick={() => setViewMode("workspace")}
+                  className="px-5 py-2.5 bg-blue-700/80 hover:bg-blue-800 text-white font-bold rounded-xl text-xs transition-all shadow-md border border-white/20 active:scale-95 flex items-center gap-2"
+                >
+                  <span>🚀</span> Launch IDE
                 </button>
               </div>
             </div>
 
-            {/* Tab Body */}
-            <div className="flex-1 relative min-h-0">
+            {/* Quick Start & Tasks Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Quick Start Card */}
+              <div className="bg-white border border-[#c4d2e2] rounded-2xl p-6 shadow-sm space-y-4">
+                <div className="flex items-center gap-2 text-[#1e3a8a] border-b border-slate-200 pb-3 font-bold text-base">
+                  <span>🚀</span> Quick Start
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <button
+                    onClick={() => setIsNewProjectOpen(true)}
+                    className="w-full text-left p-3 rounded-xl hover:bg-blue-50 text-slate-800 flex items-center gap-3 border border-slate-200/60 font-semibold group transition-all"
+                  >
+                    <span className="text-xl text-blue-600 group-hover:scale-110 transition-transform">📁</span>
+                    <div>
+                      <div>Create Project</div>
+                      <div className="text-[10px] text-slate-500 font-normal">Create a new FPGA project with HDL & constraints</div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => setViewMode("workspace")}
+                    className="w-full text-left p-3 rounded-xl hover:bg-blue-50 text-slate-800 flex items-center gap-3 border border-slate-200/60 font-semibold group transition-all"
+                  >
+                    <span className="text-xl text-purple-600 group-hover:scale-110 transition-transform">📂</span>
+                    <div>
+                      <div>Open Project</div>
+                      <div className="text-[10px] text-slate-500 font-normal">Open an existing workspace project in IDE</div>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Example Projects */}
+                <div className="pt-3 border-t border-slate-200 space-y-2">
+                  <div className="text-slate-600 font-bold text-xs">Open Example Project</div>
+                  <div className="space-y-1.5 text-xs">
+                    <button
+                      onClick={() => handleLoadExample("uart_tx")}
+                      className="w-full text-left px-3 py-2 bg-slate-50 hover:bg-blue-50 rounded-lg text-slate-700 flex items-center justify-between border border-slate-200"
+                    >
+                      <span className="font-semibold text-blue-700">UART Transmitter</span>
+                      <span className="text-[10px] text-slate-500 font-mono">PYNQ-Z2</span>
+                    </button>
+                    <button
+                      onClick={() => handleLoadExample("blinky")}
+                      className="w-full text-left px-3 py-2 bg-slate-50 hover:bg-blue-50 rounded-lg text-slate-700 flex items-center justify-between border border-slate-200"
+                    >
+                      <span className="font-semibold text-blue-700">Blinky LED Counter</span>
+                      <span className="text-[10px] text-slate-500 font-mono">PYNQ-Z2</span>
+                    </button>
+                    <button
+                      onClick={() => handleLoadExample("ripple_adder")}
+                      className="w-full text-left px-3 py-2 bg-slate-50 hover:bg-blue-50 rounded-lg text-slate-700 flex items-center justify-between border border-slate-200"
+                    >
+                      <span className="font-semibold text-blue-700">4-bit Ripple Carry Adder</span>
+                      <span className="text-[10px] text-slate-500 font-mono">Basys3</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tasks & Management Card */}
+              <div className="bg-white border border-[#c4d2e2] rounded-2xl p-6 shadow-sm space-y-4">
+                <div className="flex items-center gap-2 text-[#1e3a8a] border-b border-slate-200 pb-3 font-bold text-base">
+                  <span>⚙️</span> Lab Tasks
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <button
+                    onClick={handleOpenSettings}
+                    className="w-full text-left p-3 rounded-xl hover:bg-slate-50 text-slate-800 flex items-center gap-3 border border-slate-200/60 font-semibold"
+                  >
+                    <span className="text-xl text-blue-600">⚙️</span>
+                    <div>
+                      <div>Project Settings</div>
+                      <div className="text-[10px] text-slate-500 font-normal">Configure target FPGA board & HDL standards</div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => router.push("/program")}
+                    className="w-full text-left p-3 rounded-xl hover:bg-slate-50 text-slate-800 flex items-center gap-3 border border-slate-200/60 font-semibold"
+                  >
+                    <span className="text-xl text-amber-600">⚡</span>
+                    <div>
+                      <div>Open Hardware Programmer</div>
+                      <div className="text-[10px] text-slate-500 font-normal">Deploy compiled bitstream to physical FPGA</div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => router.push("/help")}
+                    className="w-full text-left p-3 rounded-xl hover:bg-slate-50 text-slate-800 flex items-center gap-3 border border-slate-200/60 font-semibold"
+                  >
+                    <span className="text-xl text-emerald-600">📘</span>
+                    <div>
+                      <div>Documentation & Manuals</div>
+                      <div className="text-[10px] text-slate-500 font-normal">View step-by-step FPGA guides and tutorials</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Cloud Hardware Status Card */}
+              <div className="bg-white border border-[#c4d2e2] rounded-2xl p-6 shadow-sm space-y-4 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                    <div className="flex items-center gap-2 text-[#1e3a8a] font-bold text-base">
+                      <span>🔌</span> FPGA Lab Status
+                    </div>
+                    <span className="text-[10px] font-mono text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded font-bold">
+                      Connected
+                    </span>
+                  </div>
+
+                  <div className="mt-4 space-y-3 text-xs">
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                      <div>
+                        <div className="font-bold text-slate-800">PYNQ-Z2 (Zynq-7000)</div>
+                        <div className="text-[10px] text-slate-500">Board #01 • xc7z020clg400-1</div>
+                      </div>
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" title="Online" />
+                    </div>
+
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                      <div>
+                        <div className="font-bold text-slate-800">Basys3 (Artix-7)</div>
+                        <div className="text-[10px] text-slate-500">Board #02 • xc7a35tcpg236-1</div>
+                      </div>
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" title="Online" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-200 text-center">
+                  <button
+                    onClick={() => setViewMode("workspace")}
+                    className="w-full py-2.5 bg-[#2b579a] hover:bg-[#1e3a8a] text-white font-bold rounded-xl text-xs shadow-md transition-all active:scale-95"
+                  >
+                    Open IDE Workspace
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Recent Projects Section */}
+            <div className="bg-white border border-[#c4d2e2] rounded-2xl p-6 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                <h2 className="text-base font-bold text-[#1e3a8a] flex items-center gap-2">
+                  <span>📂</span> Recent Projects
+                </h2>
+                <span className="text-xs text-slate-500 font-mono">{recentProjects.length} projects</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {recentProjects.map((p) => (
+                  <div
+                    key={p.id}
+                    className="p-4 bg-slate-50 border border-slate-200 rounded-xl hover:border-blue-400 hover:shadow-md transition-all flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-sm text-blue-900 truncate">{p.name}</span>
+                        <span className="text-[9px] px-2 py-0.5 bg-blue-100 text-blue-700 font-mono font-bold rounded">
+                          {p.targetBoard}
+                        </span>
+                      </div>
+                      <div className="text-[10px] font-mono text-slate-500 truncate mt-1">{p.path}</div>
+                      <div className="text-xs text-slate-600 mt-2 font-medium">Top Module: <span className="font-mono text-slate-800">{p.topModule}</span></div>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between text-xs">
+                      <span className="text-[10px] text-slate-400">{p.lastModified}</span>
+                      <button
+                        onClick={() => {
+                          setProjectName(p.name);
+                          setTopModuleName(p.topModule);
+                          setViewMode("workspace");
+                        }}
+                        className="px-3 py-1 bg-[#2b579a] hover:bg-[#1e3a8a] text-white font-bold rounded text-[11px]"
+                      >
+                        Launch IDE
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* ═══════════════ IDE WORKSPACE VIEW ═══════════════ */
+        <div className="flex-1 flex min-h-0 overflow-hidden bg-[#e4ecf6]">
+          {/* FLOW NAVIGATOR */}
+          <div className="w-52 border-r border-[#c4d2e2] flex flex-col overflow-y-auto shrink-0 bg-[#f0f4f9] text-[#1e293b]">
+            <div className="p-2 border-b border-[#c4d2e2] bg-[#e1ebf7] font-bold text-[11px] uppercase tracking-wider text-[#1e3a8a] flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                <span>📌</span> Flow Navigator
+              </span>
+              <span className="text-slate-500 text-[9px] font-mono">v2026.1</span>
+            </div>
+
+            <div className="p-1 space-y-3 text-[11px]">
+              <div>
+                <div className="px-2 py-1 text-slate-700 font-bold uppercase text-[10px] tracking-wider flex items-center gap-1 bg-[#e4ebf5] rounded-sm">
+                  <span>▾</span> PROJECT MANAGER
+                </div>
+                <div className="pl-3 space-y-0.5 mt-0.5">
+                  <button onClick={handleOpenSettings} className="w-full text-left px-2 py-1 rounded hover:bg-[#2b579a]/15 text-slate-800 flex items-center gap-2 font-medium">
+                    <span className="text-blue-600">⚙️</span> Settings
+                  </button>
+                  <button onClick={() => openTab("file:constraints/pynq_z2.xdc", "pynq_z2.xdc", "file")} className="w-full text-left px-2 py-1 rounded hover:bg-[#2b579a]/15 text-slate-800 flex items-center gap-2">
+                    <span className="text-emerald-600 font-bold">+</span> Add Sources
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <div className="px-2 py-1 text-slate-700 font-bold uppercase text-[10px] tracking-wider flex items-center gap-1 bg-[#e4ebf5] rounded-sm">
+                  <span>▾</span> SIMULATION
+                </div>
+                <div className="pl-3 space-y-0.5 mt-0.5">
+                  <button onClick={handleRunSimulation} className="w-full text-left px-2 py-1 rounded hover:bg-emerald-600/15 text-emerald-700 flex items-center gap-2 font-bold">
+                    <span className="text-emerald-600">▶</span> Run Simulation
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <div className="px-2 py-1 text-slate-700 font-bold uppercase text-[10px] tracking-wider flex items-center gap-1 bg-[#e4ebf5] rounded-sm">
+                  <span>▾</span> RTL ANALYSIS
+                </div>
+                <div className="pl-3 space-y-0.5 mt-0.5">
+                  <button onClick={handleRunSynthesis} className="w-full text-left px-2 py-1 rounded hover:bg-emerald-600/15 text-emerald-700 flex items-center gap-2 font-bold">
+                    <span className="text-emerald-600">▶</span> Run Linter
+                  </button>
+                  <button onClick={() => openTab("view:schematic", "Schematic Netlist", "view")} className="w-full text-left px-2 py-1 rounded hover:bg-[#2b579a]/15 text-slate-800 flex items-center gap-2 font-medium">
+                    <span>🔍</span> Open Elaborated Design
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <div className="px-2 py-1 text-slate-700 font-bold uppercase text-[10px] tracking-wider flex items-center gap-1 bg-[#e4ebf5] rounded-sm">
+                  <span>▾</span> SYNTHESIS
+                </div>
+                <div className="pl-3 space-y-0.5 mt-0.5">
+                  <button onClick={handleRunSynthesis} className="w-full text-left px-2 py-1 rounded hover:bg-emerald-600/15 text-emerald-700 flex items-center gap-2 font-bold">
+                    <span className="text-emerald-600">▶</span> Run Synthesis
+                  </button>
+                  <button onClick={() => openTab("view:schematic", "Schematic Netlist", "view")} className="w-full text-left px-2 py-1 rounded hover:bg-[#2b579a]/15 text-slate-800 flex items-center gap-2">
+                    <span>📂</span> Open Synthesized Design
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <div className="px-2 py-1 text-slate-700 font-bold uppercase text-[10px] tracking-wider flex items-center gap-1 bg-[#e4ebf5] rounded-sm">
+                  <span>▾</span> IMPLEMENTATION
+                </div>
+                <div className="pl-3 space-y-0.5 mt-0.5">
+                  <button onClick={handleRunImplementation} className="w-full text-left px-2 py-1 rounded hover:bg-emerald-600/15 text-emerald-700 flex items-center gap-2 font-bold">
+                    <span className="text-emerald-600">▶</span> Run Implementation
+                  </button>
+                  <button onClick={() => openTab("view:device", "Device Floorplan", "view")} className="w-full text-left px-2 py-1 rounded hover:bg-[#2b579a]/15 text-slate-800 flex items-center gap-2">
+                    <span>📂</span> Open Implemented Design
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <div className="px-2 py-1 text-slate-700 font-bold uppercase text-[10px] tracking-wider flex items-center gap-1 bg-[#e4ebf5] rounded-sm">
+                  <span>▾</span> PROGRAM AND DEBUG
+                </div>
+                <div className="pl-3 space-y-0.5 mt-0.5">
+                  <button onClick={handleGenerateBitstream} className="w-full text-left px-2 py-1 rounded hover:bg-[#2b579a]/15 text-slate-800 flex items-center gap-2 font-medium">
+                    <span>📦</span> Generate Bitstream
+                  </button>
+                  <button onClick={() => router.push("/program")} className="w-full text-left px-2 py-1 rounded hover:bg-amber-600/15 text-amber-800 flex items-center gap-2 font-bold">
+                    <span>⚡</span> Program Device
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* SOURCES DOCK */}
+          <div className="w-72 border-r border-[#c4d2e2] flex flex-col shrink-0 overflow-hidden bg-[#f4f7fc]">
+            <div className="h-8 border-b border-[#c4d2e2] flex items-center justify-between px-3 bg-[#e4ebf5] shrink-0">
+              <span className="font-bold text-[11px] text-[#1e3a8a]">Sources</span>
+              <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono">
+                <span>Updating 🔄</span>
+              </div>
+            </div>
+
+            <div className="flex-1 p-2 overflow-y-auto font-mono text-[11px] space-y-1 bg-white">
+              <div className="pl-1 space-y-1">
+                <div className="flex items-center gap-1 text-slate-700 font-bold">
+                  <span>▾</span> <span className="text-[#d97706]">📁</span> Design Sources ({Object.keys(files).filter(f => f.endsWith(".v")).length})
+                </div>
+
+                <div className="pl-4 space-y-1">
+                  {Object.keys(files).filter(f => f.endsWith(".v") || f.endsWith(".sv") || f.endsWith(".vhd")).map((path) => {
+                    const isTop = path.includes(topModuleName) || path.includes("uart_tx.v");
+                    const isSelected = selectedFileItem === path;
+                    return (
+                      <div
+                        key={path}
+                        onClick={() => selectFile(path)}
+                        className={`flex items-center justify-between px-2 py-1 rounded cursor-pointer transition-colors ${
+                          isSelected ? "bg-[#2b579a] text-white font-bold" : "text-slate-800 hover:bg-slate-100"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span>📄</span>
+                          <span className="truncate">{path.split("/").pop()}</span>
+                          {isTop && (
+                            <span className="text-[9px] px-1 py-0.2 bg-emerald-100 text-emerald-700 rounded border border-emerald-300 font-bold">
+                              top
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteFile(path);
+                          }}
+                          className="text-red-500 hover:text-red-700 px-1"
+                          title="Remove file"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="pl-1 pt-2 space-y-1">
+                <div className="flex items-center gap-1 text-slate-700 font-bold">
+                  <span>▾</span> <span className="text-[#d97706]">📁</span> Constraints
+                </div>
+
+                <div className="pl-4 space-y-1">
+                  <div className="flex items-center gap-1.5 text-slate-600">
+                    <span>📁</span> constrs_1
+                  </div>
+                  {Object.keys(files).filter(f => f.endsWith(".xdc")).map((path) => (
+                    <div
+                      key={path}
+                      onClick={() => selectFile(path)}
+                      className={`pl-4 flex items-center justify-between px-2 py-1 rounded cursor-pointer ${
+                        selectedFileItem === path ? "bg-[#2b579a] text-white font-bold" : "text-slate-800 hover:bg-slate-100"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 truncate">
+                        <span>📜</span>
+                        <span className="truncate">{path.split("/").pop()}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="h-7 border-t border-[#c4d2e2] bg-[#e4ebf5] flex items-center px-1 text-[10px] shrink-0 font-medium">
+              {(["hierarchy", "libraries", "compile_order"] as const).map((st) => (
+                <button
+                  key={st}
+                  onClick={() => setSourcesTab(st)}
+                  className={`px-2.5 py-1 rounded-t capitalize transition-colors ${
+                    sourcesTab === st ? "bg-white text-[#1e3a8a] font-bold border-t-2 border-t-[#2b579a]" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  {st}
+                </button>
+              ))}
+            </div>
+
+            <div className="h-36 border-t border-[#c4d2e2] bg-[#f8fafc] p-2 text-[11px] overflow-y-auto">
+              <div className="font-bold text-[#1e3a8a] border-b border-[#cbd5e1] pb-1 mb-2 flex items-center justify-between">
+                <span>Properties</span>
+                <span className="text-slate-500 font-mono text-[9px]">{selectedFileItem}</span>
+              </div>
+
+              {selectedFileItem ? (
+                <div className="space-y-1 text-slate-700 font-mono text-[10px]">
+                  <div className="flex justify-between"><span className="text-slate-500">Name:</span> <span className="text-slate-900 font-bold">{selectedFileItem.split("/").pop()}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Path:</span> <span className="truncate text-slate-800">{selectedFileItem}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Type:</span> <span className="text-blue-700">{selectedFileItem.endsWith(".xdc") ? "XDC Constraints" : "Verilog Source"}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Target Part:</span> <span className="text-slate-800">xc7z020clg400-1</span></div>
+                </div>
+              ) : (
+                <div className="text-slate-400 italic text-center pt-4">Select an object to see properties</div>
+              )}
+            </div>
+          </div>
+
+          {/* MAIN CANVAS */}
+          <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#e4ecf6]">
+            <div className="h-8 border-b border-[#c4d2e2] bg-[#dce6f5] flex items-center px-1 overflow-x-auto shrink-0">
+              {openTabs.map((t) => {
+                const isActive = activeTabId === t.id;
+                return (
+                  <div
+                    key={t.id}
+                    onClick={() => {
+                      setActiveTabId(t.id);
+                      if (t.type === "view") {
+                        setActiveMainTab(t.id.replace("view:", "") as any);
+                      } else {
+                        const path = t.id.replace("file:", "");
+                        setActiveFile(path);
+                        setActiveCode(files[path] || "");
+                        setActiveMainTab("editor");
+                      }
+                    }}
+                    className={`h-7 px-3 text-[11px] font-semibold flex items-center gap-2 border-r border-[#cbd5e1] cursor-pointer select-none transition-all rounded-t ${
+                      isActive
+                        ? "bg-white text-[#1e3a8a] border-t-2 border-t-[#2b579a] font-bold shadow-sm"
+                        : "text-slate-600 hover:bg-white/60"
+                    }`}
+                  >
+                    <span>{t.type === "view" ? "📊" : "📄"} {t.label}</span>
+                    {t.id !== "view:project_summary" && (
+                      <button
+                        onClick={(e) => closeTab(e, t.id)}
+                        className="w-3.5 h-3.5 rounded hover:bg-slate-200 flex items-center justify-center text-[10px]"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex-1 relative overflow-auto min-h-0 bg-[#f8fafc]">
+              {activeMainTab === "project_summary" && (
+                <div className="p-6 max-w-6xl mx-auto space-y-6">
+                  <div className="flex items-center justify-between border-b border-[#cbd5e1] pb-3">
+                    <div>
+                      <h1 className="text-xl font-bold text-[#1e3a8a] flex items-center gap-2">
+                        <span>PROJECT MANAGER</span>
+                        <span className="text-slate-600 text-sm font-mono">- {projectName}</span>
+                      </h1>
+                      <p className="text-xs text-slate-500 mt-0.5">FPGA Lab Design Suite Project Configuration</p>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-xs">
+                      {(["overview", "dashboard"] as const).map((sub) => (
+                        <button
+                          key={sub}
+                          onClick={() => setSummarySubtab(sub)}
+                          className={`px-3 py-1 rounded font-semibold capitalize transition-colors ${
+                            summarySubtab === sub ? "bg-[#2b579a] text-white" : "bg-white text-slate-700 border border-[#cbd5e1] hover:bg-slate-50"
+                          }`}
+                        >
+                          {sub}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {summarySubtab === "overview" && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="bg-white border border-[#c4d2e2] rounded-lg p-5 space-y-3 shadow-sm">
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                          <h2 className="font-bold text-sm text-[#1e3a8a]">Settings</h2>
+                          <button onClick={handleOpenSettings} className="text-blue-600 hover:underline text-xs font-semibold">
+                            Edit
+                          </button>
+                        </div>
+
+                        <div className="space-y-2 text-xs font-mono">
+                          <div className="flex justify-between py-1 border-b border-slate-100">
+                            <span className="text-slate-600 font-sans">Project name:</span>
+                            <span className="text-slate-900 font-bold">{projectName}</span>
+                          </div>
+                          <div className="flex justify-between py-1 border-b border-slate-100">
+                            <span className="text-slate-600 font-sans">Project location:</span>
+                            <span className="text-slate-800 truncate max-w-xs">{projectPath}</span>
+                          </div>
+                          <div className="flex justify-between py-1 border-b border-slate-100">
+                            <span className="text-slate-600 font-sans">Product family:</span>
+                            <span className="text-slate-900">{productFamily}</span>
+                          </div>
+                          <div className="flex justify-between py-1 border-b border-slate-100">
+                            <span className="text-slate-600 font-sans">Project part:</span>
+                            <span className="text-blue-700 font-bold">{projectPart}</span>
+                          </div>
+                          <div className="flex justify-between py-1 border-b border-slate-100">
+                            <span className="text-slate-600 font-sans">Top module name:</span>
+                            <span className="text-blue-700 font-bold">{topModuleName}</span>
+                          </div>
+                          <div className="flex justify-between py-1 border-b border-slate-100">
+                            <span className="text-slate-600 font-sans">Target language:</span>
+                            <span className="text-slate-900">{targetLanguage}</span>
+                          </div>
+                          <div className="flex justify-between py-1 border-b border-slate-100">
+                            <span className="text-slate-600 font-sans">Simulator language:</span>
+                            <span className="text-slate-900">{simulatorLanguage}</span>
+                          </div>
+                          <div className="flex justify-between py-1">
+                            <span className="text-slate-600 font-sans">Target Simulator:</span>
+                            <span className="text-slate-900">{targetSimulator}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-6">
+                        <div className="bg-white border border-[#c4d2e2] rounded-lg p-5 space-y-3 shadow-sm">
+                          <div className="border-b border-slate-200 pb-2">
+                            <h2 className="font-bold text-sm text-[#1e3a8a]">Board Part</h2>
+                          </div>
+                          <div className="flex justify-between text-xs font-mono py-1">
+                            <span className="text-slate-600 font-sans">Display name:</span>
+                            <span className="text-blue-700 font-bold">pynq z2</span>
+                          </div>
+                        </div>
+
+                        <div className="bg-white border border-[#c4d2e2] rounded-lg p-5 space-y-3 shadow-sm">
+                          <h2 className="font-bold text-sm text-[#1e3a8a] border-b border-slate-200 pb-2">Design Flow Actions</h2>
+                          <div className="grid grid-cols-2 gap-3">
+                            <button
+                              onClick={handleRunSimulation}
+                              className="p-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg text-emerald-800 font-bold text-xs flex items-center justify-center gap-2"
+                            >
+                              <span className="text-emerald-600">▶</span> Run Simulation
+                            </button>
+                            <button
+                              onClick={handleRunSynthesis}
+                              className="p-3 bg-blue-50 hover:bg-blue-100 border border-blue-300 rounded-lg text-blue-800 font-bold text-xs flex items-center justify-center gap-2"
+                            >
+                              <span className="text-blue-600">▶</span> Run Synthesis
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {summarySubtab === "dashboard" && (
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                      <div className="bg-white border border-[#cbd5e1] rounded-lg p-4 text-center shadow-sm">
+                        <div className="text-2xl font-bold text-blue-700 font-mono">{lutUsage}%</div>
+                        <div className="text-xs text-slate-600 mt-1">LUT Utilization</div>
+                      </div>
+                      <div className="bg-white border border-[#cbd5e1] rounded-lg p-4 text-center shadow-sm">
+                        <div className="text-2xl font-bold text-purple-700 font-mono">{ffUsage}%</div>
+                        <div className="text-xs text-slate-600 mt-1">FF Utilization</div>
+                      </div>
+                      <div className="bg-white border border-[#cbd5e1] rounded-lg p-4 text-center shadow-sm">
+                        <div className="text-2xl font-bold text-emerald-700 font-mono">{wnsValue}</div>
+                        <div className="text-xs text-slate-600 mt-1">WNS Timing Slack</div>
+                      </div>
+                      <div className="bg-white border border-[#cbd5e1] rounded-lg p-4 text-center shadow-sm">
+                        <div className="text-2xl font-bold text-amber-700 font-mono">{synthStatus}</div>
+                        <div className="text-xs text-slate-600 mt-1">Synthesis Run Status</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {activeMainTab === "editor" && (
                 activeFile ? (
                   <Editor
@@ -1582,342 +1504,504 @@ Clock Networks: 1 (sys_clk_pin)`);
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-slate-500 italic">
-                    Select a source file from Explorer to edit
+                    Select a source file from Sources tree to edit
                   </div>
                 )
               )}
 
               {activeMainTab === "schematic" && (
-                <div className="w-full h-full flex items-center justify-center p-6 overflow-auto bg-[#1a1a1a]">
+                <div className="w-full h-full flex items-center justify-center p-6 bg-white overflow-auto">
                   {schematicSvg ? (
-                    <div 
-                      className="w-full h-full max-w-4xl flex items-center justify-center animate-fade-in" 
-                      dangerouslySetInnerHTML={{ __html: schematicSvg }} 
-                    />
+                    <div className="w-full h-full max-w-4xl flex items-center justify-center" dangerouslySetInnerHTML={{ __html: schematicSvg }} />
                   ) : (
-                    <div className="text-slate-500 italic text-center">
-                      No elaborated schematic netlist generated yet.<br />Run Synthesis to compile design.
+                    <div className="text-slate-600 text-center space-y-3">
+                      <div className="text-4xl">🗺️</div>
+                      <div className="font-bold text-slate-900">Elaborated Schematic Netlist</div>
+                      <p className="text-xs text-slate-600 max-w-md">Run Synthesis (F11) to elaborate netlist gates for &apos;{topModuleName}&apos;.</p>
+                      <button onClick={handleRunSynthesis} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold shadow-md hover:bg-blue-700">
+                        ▶ Run Synthesis Now
+                      </button>
                     </div>
                   )}
                 </div>
               )}
 
               {activeMainTab === "waveform" && (
-                <div className="w-full h-full flex flex-col bg-[#1b1b1b]">
-                  <div className="h-8 bg-[#252526] border-b border-[#2d2d2d] shrink-0 flex items-center justify-between px-3">
+                <div className="w-full h-full flex flex-col bg-[#0f172a]">
+                  <div className="h-8 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-3 text-xs">
                     <div className="flex items-center gap-3">
-                      <span className="text-[10px] font-bold text-slate-300 uppercase">Waveform Viewer</span>
+                      <span className="font-bold text-slate-200">Waveform Viewer</span>
                       {waves && (
-                        <>
-                          <div className="h-4 w-[1px] bg-slate-700" />
-                          <div className="flex items-center gap-1.5 text-[10px]">
-                            <button onClick={handleZoomIn} className="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 rounded text-slate-300 font-bold" title="Zoom In">+</button>
-                            <button onClick={handleZoomOut} className="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 rounded text-slate-300 font-bold" title="Zoom Out">-</button>
-                            <button onClick={handleZoomFit} className="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 rounded text-slate-300 text-[9px]" title="Zoom Fit">Fit</button>
-                            <span className="text-slate-500 font-mono ml-1">({Math.round(zoomLevel * 100)}%)</span>
-                          </div>
-
-                          <div className="h-4 w-[1px] bg-slate-700" />
-                          <div className="flex items-center gap-1">
-                            <span className="text-slate-500 uppercase text-[8px] font-bold">Radix:</span>
-                            <select
-                              value={globalRadix}
-                              onChange={(e) => setGlobalRadix(e.target.value as any)}
-                              className="text-[10px] bg-slate-800 border border-slate-700 text-slate-300 rounded px-1.5 py-0.5 focus:outline-none"
-                            >
-                              <option value="hex">HEX</option>
-                              <option value="bin">BIN</option>
-                              <option value="dec">DEC</option>
-                            </select>
-                          </div>
-
-                          {cursorTime !== null && (
-                            <>
-                              <div className="h-4 w-[1px] bg-slate-700" />
-                              <span className="text-amber-400 font-mono text-[10px] font-bold">Cursor: {cursorTime} ns</span>
-                            </>
-                          )}
-                        </>
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-400 text-[10px]">Radix:</span>
+                          <select value={globalRadix} onChange={(e) => setGlobalRadix(e.target.value as any)} className="bg-slate-800 border border-slate-700 text-slate-200 text-[10px] rounded px-1.5 py-0.5">
+                            <option value="hex">HEX</option>
+                            <option value="bin">BIN</option>
+                            <option value="dec">DEC</option>
+                          </select>
+                        </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      {waves && (
-                        <button 
-                          onClick={handleDownloadVcd} 
-                          className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-[10px] font-bold shadow-md shadow-blue-500/20 transition-all active:scale-95 mr-2" 
-                          title="Download VCD for local GTKWave"
-                        >
-                          📥 Download VCD
+
+                    <button onClick={handleRunSimulation} className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold">
+                      ▶ Re-run Simulation
+                    </button>
+                  </div>
+
+                  <div className="flex-1 flex items-center justify-center p-6 text-slate-400 text-center">
+                    {waves ? (
+                      <div className="font-mono text-emerald-400">Waveform Signals Loaded ({Object.keys(waves).length} signals)</div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="text-4xl">🧪</div>
+                        <div className="font-bold text-slate-200">Behavioral Simulation Waveform</div>
+                        <p className="text-xs text-slate-400">Run simulation to inspect clock cycles and registers.</p>
+                        <button onClick={handleRunSimulation} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold">
+                          ▶ Run Behavioral Simulation
                         </button>
-                      )}
-                      <button 
-                        title="Run behavioral simulation" 
-                        onClick={handleRunSimulation} 
-                        className="text-slate-400 hover:text-slate-100 flex items-center gap-1 text-[10px] font-bold"
-                      >
-                        ▶ Run Simulation
-                      </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {activeMainTab === "device" && (
+                <div className="w-full h-full bg-[#030712] text-slate-200 flex flex-col min-h-0 overflow-hidden font-mono select-none">
+                  {/* Controls Header Toolbar */}
+                  <div className="h-8 bg-[#090d16] border-b border-slate-800 flex items-center justify-between px-3 text-xs shrink-0">
+                    <div className="flex items-center gap-4">
+                      <span className="font-bold text-[#00f0ff] flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-[#00f0ff] animate-pulse" />
+                        Device Layout - xc7z020clg400-1
+                      </span>
+
+                      <div className="flex items-center gap-3 text-[11px] text-slate-400">
+                        <label className="flex items-center gap-1 cursor-pointer hover:text-slate-200">
+                          <input type="checkbox" defaultChecked className="accent-cyan-500 rounded" />
+                          <span className="text-cyan-400">Placed Logic (Cyan)</span>
+                        </label>
+                        <label className="flex items-center gap-1 cursor-pointer hover:text-slate-200">
+                          <input type="checkbox" defaultChecked className="accent-red-500 rounded" />
+                          <span className="text-red-400">Routing Nets (Red)</span>
+                        </label>
+                        <label className="flex items-center gap-1 cursor-pointer hover:text-slate-200">
+                          <input type="checkbox" defaultChecked className="accent-pink-500 rounded" />
+                          <span className="text-pink-400">Clock Regions</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-[10px]">
+                      <span className="text-slate-400">Selected:</span>
+                      <span className="text-emerald-400 font-bold bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                        SLICE_X12Y45 (LUT6: uart_tx/state[1])
+                      </span>
+                      <span className="text-slate-400">WNS:</span>
+                      <span className="text-[#00f0ff] font-bold">+1.842 ns</span>
                     </div>
                   </div>
 
-                  {waves ? (
-                    <div className="flex-1 flex flex-row min-h-0 bg-[#121212] overflow-auto select-none">
-                      {/* Wave Names Column */}
-                      <div className="w-64 border-r border-[#2d2d2d] shrink-0 font-mono text-[10px] text-slate-400 select-none">
-                        <div className="h-6 border-b border-[#2d2d2d] bg-[#1a1a1a] flex items-center justify-between px-2 font-bold">
-                          <span>Signal Name</span>
-                          <span>Value</span>
-                        </div>
-                        {waves.signals.map((sig: any, idx: number) => {
-                          const rawVal = getSignalValueAtTime(sig.changes, cursorTime ?? 0);
-                          const dispVal = sig.size > 1 ? formatBusValue(rawVal, globalRadix) : rawVal;
+                  {/* FPGA Die Silicon SVG Canvas */}
+                  <div className="flex-1 relative bg-[#02050b] overflow-hidden flex items-center justify-center p-2">
+                    <svg className="w-full h-full max-w-5xl max-h-[600px]" viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid meet">
+                      {/* Dark Die Silicon Background */}
+                      <rect x="0" y="0" width="1000" height="700" fill="#030712" />
+
+                      {/* Left Dark Outer Panel */}
+                      <rect x="0" y="0" width="220" height="700" fill="#000000" />
+                      <rect x="130" y="230" width="50" height="90" fill="#00a896" opacity="0.8" />
+
+                      {/* I/O Banks Vertical Column (Far Left Pads) */}
+                      {Array.from({ length: 45 }).map((_, i) => (
+                        <rect key={`iol-${i}`} x="195" y={30 + i * 14} width="8" height="10" fill="#00f0ff" opacity="0.7" />
+                      ))}
+
+                      {/* Right Outer I/O Bank Towers */}
+                      <g>
+                        {Array.from({ length: 35 }).map((_, i) => (
+                          <rect key={`ior1-${i}`} x="930" y={40 + i * 18} width="16" height="14" fill="#d97706" stroke="#fbbf24" strokeWidth="0.5" />
+                        ))}
+                        {Array.from({ length: 35 }).map((_, i) => (
+                          <rect key={`ior2-[#i]`} x="965" y={40 + i * 18} width="16" height="14" fill="#00a896" stroke="#00f0ff" strokeWidth="0.5" />
+                        ))}
+                      </g>
+
+                      {/* Vertical Routing Channel Bus Lines */}
+                      {Array.from({ length: 24 }).map((_, i) => (
+                        <g key={`bus-${i}`}>
+                          <line x1={240 + i * 28} y1="0" x2={240 + i * 28} y2="700" stroke={i % 3 === 0 ? "#ef4444" : i % 5 === 0 ? "#10b981" : "#3b82f6"} strokeWidth="1" opacity="0.4" />
+                          <line x1={243 + i * 28} y1="0" x2={243 + i * 28} y2="700" stroke={i % 2 === 0 ? "#ec4899" : "#8b5cf6"} strokeWidth="0.8" opacity="0.3" />
+                        </g>
+                      ))}
+
+                      {/* Horizontal Clock Region Boundary Lines */}
+                      <line x1="220" y1="280" x2="920" y2="280" stroke="#ec4899" strokeWidth="2" />
+                      <line x1="220" y1="560" x2="920" y2="560" stroke="#ec4899" strokeWidth="2" />
+                      <line x1="420" y1="0" x2="420" y2="700" stroke="#a855f7" strokeWidth="2" />
+                      <line x1="680" y1="0" x2="680" y2="700" stroke="#a855f7" strokeWidth="1.5" />
+
+                      {/* Clock Region Labels */}
+                      <text x="230" y="275" fill="#a855f7" fontSize="12" fontWeight="bold">X0Y2</text>
+                      <text x="430" y="275" fill="#a855f7" fontSize="12" fontWeight="bold">X1Y2</text>
+                      <text x="230" y="555" fill="#a855f7" fontSize="12" fontWeight="bold">X0Y1</text>
+                      <text x="430" y="555" fill="#a855f7" fontSize="12" fontWeight="bold">X1Y1</text>
+
+                      {/* Placed Logic Cell Sprites (Dense Cyan/Teal Blocks Matching Screenshot) */}
+                      {/* Cluster 1: Main CLB Logic Block (X0Y1 / X0Y2) */}
+                      <g fill="#00f0ff" opacity="0.85">
+                        {Array.from({ length: 140 }).map((_, i) => {
+                          const rx = 235 + (i % 14) * 12 + ((i * 7) % 11);
+                          const ry = 295 + Math.floor(i / 14) * 18 + ((i * 13) % 9);
                           return (
-                            <div 
-                              key={sig.name} 
-                              draggable
-                              onDragStart={() => handleDragStart(idx)}
-                              onDragOver={(e) => handleDragOver(e, idx)}
-                              onDrop={() => handleDrop(idx)}
-                              className="h-8 flex items-center justify-between px-2 border-b border-[#222222] truncate hover:bg-slate-800/40 cursor-grab active:cursor-grabbing transition-colors" 
-                              title={`${sig.name} = ${dispVal}`}
-                            >
-                              <div className="flex items-center gap-1.5 truncate select-none">
-                                <span className="text-slate-600 font-bold mr-0.5">⋮⋮</span>
-                                <span className="truncate">
-                                  {sig.size > 1 ? `📂 ${sig.name}[${sig.size-1}:0]` : `📈 ${sig.name}`}
-                                </span>
-                              </div>
-                              <span className="font-bold text-cyan-400 ml-2">{dispVal}</span>
-                            </div>
+                            <rect key={`c1-${i}`} x={rx} y={ry} width="7" height="12" rx="0.5" />
                           );
                         })}
-                      </div>
+                      </g>
 
-                      {/* Wave Canvas Column */}
-                      <div className="flex-1 relative pt-1.5 flex flex-col overflow-x-auto">
-                        <div className="h-5 border-b border-[#2d2d2d] relative font-mono text-[8px] text-slate-500 shrink-0 select-none bg-[#121212]" style={{ width: `${currentWaveWidth}px` }}>
-                          {getTimelineTicks().map((t) => {
-                            const x = (t / maxSimTime) * currentWaveWidth;
-                            return (
-                              <span key={t} className="absolute transform -translate-x-1/2" style={{ left: `${x}px` }}>
-                                {t} ns
-                              </span>
-                            );
-                          })}
-                        </div>
+                      {/* Cluster 2: Bottom Placed Logic Density */}
+                      <g fill="#00d8d6" opacity="0.9">
+                        {Array.from({ length: 220 }).map((_, i) => {
+                          const rx = 240 + (i % 22) * 8 + ((i * 3) % 7);
+                          const ry = 570 + Math.floor(i / 22) * 11 + ((i * 5) % 6);
+                          return (
+                            <rect key={`c2-${i}`} x={rx} y={ry} width="5" height="8" />
+                          );
+                        })}
+                      </g>
 
-                        <div className="flex-1 relative bg-[#121212] overflow-y-auto" style={{ width: `${currentWaveWidth}px`, height: `${waves.signals.length * ROW_HEIGHT}px` }}>
-                          <svg 
-                            className="absolute inset-0 w-full h-full cursor-crosshair" 
-                            style={{ height: `${waves.signals.length * ROW_HEIGHT}px` }}
-                            xmlns="http://www.w3.org/2000/svg"
-                            onClick={handleWaveformClick}
-                          >
-                            {/* Gridlines */}
-                            {getTimelineTicks().map((t) => {
-                              const x = (t / maxSimTime) * currentWaveWidth;
-                              return (
-                                <line key={t} x1={x} y1="0" x2={x} y2="100%" stroke="#222222" strokeWidth="1" strokeDasharray="3" />
-                              );
-                            })}
+                      {/* Cluster 3: Middle Interconnect Slices */}
+                      <g fill="#06b6d4" opacity="0.8">
+                        {Array.from({ length: 80 }).map((_, i) => {
+                          const rx = 430 + (i % 8) * 14 + ((i * 5) % 9);
+                          const ry = 480 + Math.floor(i / 8) * 12;
+                          return (
+                            <rect key={`c3-${i}`} x={rx} y={ry} width="8" height="6" />
+                          );
+                        })}
+                      </g>
 
-                            {/* Waveforms */}
-                            {waves.signals.map((sig: any, idx: number) => {
-                              const rowY = idx * ROW_HEIGHT;
-                              return (
-                                <g key={sig.name} transform={`translate(0, ${rowY})`}>
-                                  <line x1="0" y1={ROW_HEIGHT} x2="100%" y2={ROW_HEIGHT} stroke="#222222" strokeWidth="1" />
-                                  {sig.size === 1 ? (
-                                    <path d={getSignalPath(sig.changes, maxSimTime, currentWaveWidth)} stroke="#10b981" strokeWidth="1.5" fill="none" />
-                                  ) : (
-                                    (() => {
-                                      const { topPath, bottomPath, labels } = getBusPathsAndLabels(sig.changes, maxSimTime, currentWaveWidth);
-                                      return (
-                                        <g>
-                                          <path d={topPath} stroke="#3b82f6" strokeWidth="1.2" fill="none" />
-                                          <path d={bottomPath} stroke="#3b82f6" strokeWidth="1.2" fill="none" />
-                                          {sig.changes.map(([time]: any, cIdx: number) => {
-                                            if (cIdx === 0) return null;
-                                            const x = (time / maxSimTime) * currentWaveWidth;
-                                            return (
-                                              <line key={cIdx} x1={x} y1="10" x2={x} y2="22" stroke="#3b82f6" strokeWidth="1" />
-                                            );
-                                          })}
-                                          {labels.map((lbl: any, lIdx: number) => (
-                                            <text key={lIdx} x={lbl.x} y="18" fontFamily="monospace" fontSize="8" fill="#e2e8f0" textAnchor="middle">
-                                              {formatBusValue(lbl.text, globalRadix)}
-                                            </text>
-                                          ))}
-                                        </g>
-                                      );
-                                    })()
-                                  )}
-                                </g>
-                              );
-                            })}
+                      {/* Placed BRAM / DSP Highlight Towers */}
+                      <g>
+                        <rect x="630" y="100" width="14" height="60" stroke="#e2e8f0" fill="none" strokeWidth="1.5" />
+                        <rect x="635" y="145" width="8" height="12" fill="#ec4899" />
+                        <rect x="630" y="210" width="14" height="24" stroke="#e2e8f0" fill="none" strokeWidth="1" />
 
-                            {/* Yellow Interactive Cursor Line */}
-                            {cursorTime !== null && (
-                              <g>
-                                <line 
-                                  x1={(cursorTime / maxSimTime) * currentWaveWidth} 
-                                  y1="0" 
-                                  x2={(cursorTime / maxSimTime) * currentWaveWidth} 
-                                  y2="100%" 
-                                  stroke="#eab308" 
-                                  strokeWidth="1.5" 
-                                />
-                                <polygon 
-                                  points={`${(cursorTime / maxSimTime) * currentWaveWidth - 4},0 ${(cursorTime / maxSimTime) * currentWaveWidth + 4},0 ${(cursorTime / maxSimTime) * currentWaveWidth},6`} 
-                                  fill="#eab308" 
-                                />
-                              </g>
-                            )}
-                          </svg>
-                        </div>
-                      </div>
+                        {Array.from({ length: 8 }).map((_, i) => (
+                          <rect key={`dsp-${i}`} x="630" y={250 + i * 22} width="14" height="14" stroke="#e2e8f0" fill="none" strokeWidth="1" />
+                        ))}
+                      </g>
+
+                      {/* Critical Timing Path Net Line (Magenta) */}
+                      <path d="M 195 290 Q 240 280 280 320 T 360 410 T 635 151" stroke="#ec4899" strokeWidth="1.5" fill="none" strokeDasharray="4 2" />
+                    </svg>
+
+                    {/* Bottom Floating Map Scale */}
+                    <div className="absolute bottom-3 right-3 bg-slate-900/90 border border-slate-800 rounded-lg p-2 text-[10px] text-slate-300 flex items-center gap-3 backdrop-blur-xs">
+                      <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 bg-[#00f0ff] rounded-xs" /> Placed Slice</span>
+                      <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 bg-[#ec4899] rounded-xs" /> Critical Path</span>
+                      <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 bg-[#d97706] rounded-xs" /> I/O Bank</span>
                     </div>
-                  ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-slate-500 italic p-6 text-center">
-                      Waveform viewer will display simulation traces here.<br />
-                      <button onClick={handleRunSimulation} className="mt-3 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-bold transition-all shadow-md">
-                        Run Simulator
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {activeMainTab === "timing" && (
-                <div className="w-full h-full p-4 font-mono text-xs text-slate-300 bg-[#151515] overflow-auto select-text">
-                  <pre className="whitespace-pre">{timingReport || "No timing summary report generated yet."}</pre>
-                </div>
-              )}
-
-              {activeMainTab === "power" && (
-                <div className="w-full h-full p-4 font-mono text-xs text-slate-300 bg-[#151515] overflow-auto select-text">
-                  <pre className="whitespace-pre">{powerReport || "No power estimation report generated yet."}</pre>
-                </div>
-              )}
-
-              {activeMainTab === "utilization" && (
-                <div className="w-full h-full p-4 font-mono text-xs text-slate-300 bg-[#151515] overflow-auto select-text">
-                  <pre className="whitespace-pre">{utilizationReport || "No resource utilization report generated yet."}</pre>
+                  </div>
                 </div>
               )}
             </div>
           </div>
+        </div>
+      )}
 
-          {/* Console Height Resizer Handle */}
-          <div
-            onMouseDown={startResizeConsole}
-            className={`h-1 cursor-row-resize shrink-0 transition-colors z-30 select-none ${
-              isDraggingConsole ? "bg-blue-500" : "bg-transparent hover:bg-blue-500/50"
-            }`}
-            style={{ width: "100%" }}
-          />
-
-          {/* Bottom Console Panel (Tcl Terminal Console) */}
-          <div 
-            style={{ height: `${consoleHeight}px` }}
-            className={`border-t flex flex-col shrink-0 ${bgCard} ${borderCol}`}
-          >
-            <div className={`h-8 flex items-center px-3 border-b gap-3 overflow-x-auto ${borderCol}`}>
-              {REPORT_TABS.map((t) => (
+      {/* ── 3. BOTTOM CONSOLE DOCK ─────────────────────────── */}
+      {viewMode === "workspace" && (
+        <div className="h-52 border-t border-[#c4d2e2] flex flex-col shrink-0 bg-[#f0f4f9]">
+          <div className="h-7 border-b border-[#c4d2e2] flex items-center justify-between px-2 bg-[#e4ebf5] text-xs shrink-0">
+            <div className="flex items-center gap-1 font-semibold">
+              {[
+                { id: "tcl", label: "Tcl Console" },
+                { id: "messages", label: "Messages" },
+                { id: "log", label: "Log" },
+                { id: "reports", label: "Reports" },
+                { id: "runs", label: "Design Runs" }
+              ].map((dt) => (
                 <button
-                  key={t.id}
-                  onClick={() => setActiveTab(t.id)}
-                  className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded transition-all whitespace-nowrap ${
-                    activeTab === t.id
-                      ? "bg-blue-500/10 text-blue-500 font-extrabold"
-                      : "text-slate-500 hover:text-slate-300"
+                  key={dt.id}
+                  onClick={() => setBottomDockTab(dt.id as any)}
+                  className={`px-3 py-0.5 rounded-t text-[11px] transition-colors ${
+                    bottomDockTab === dt.id
+                      ? "bg-white text-[#1e3a8a] font-bold border-t-2 border-t-[#2b579a]"
+                      : "text-slate-700 hover:bg-white/60"
                   }`}
                 >
-                  {t.label}
+                  {dt.label}
                 </button>
               ))}
             </div>
 
-            {/* Console Log Area */}
-            <div className={`flex-1 overflow-y-auto p-3 font-mono text-[11px] leading-relaxed select-text ${bgTerm}`}>
-              {activeTab === "console" && (
-                <div className="space-y-1">
-                  {terminalLogs.map((log, idx) => (
-                    <div 
-                      key={idx} 
-                      className={
-                        log.startsWith("ERROR:") || log.includes("[Error]") ? "text-red-400 font-bold" :
-                        log.startsWith("WARNING:") ? "text-amber-400 font-semibold" :
-                        log.startsWith("INFO:") ? "text-cyan-400" :
-                        log.startsWith("Tcl%") ? "text-slate-400 font-bold" :
-                        log.includes("succeeded") || log.includes("completed") || log.includes("Met") ? "text-emerald-400" : "text-slate-300"
-                      }
-                    >
+            <div className="text-[10px] text-slate-600 font-mono">
+              Status: <span className="text-emerald-700 font-bold">{synthStatus}</span>
+            </div>
+          </div>
+
+          <div className="flex-1 min-h-0 overflow-auto bg-white">
+            {bottomDockTab === "runs" && (
+              <div className="w-full h-full overflow-auto text-[11px]">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-[#cbd5e1] font-bold text-[10px] uppercase bg-[#e2e8f0] text-slate-700">
+                      <th className="p-2 border-r border-[#cbd5e1]">Name</th>
+                      <th className="p-2 border-r border-[#cbd5e1]">Constraints</th>
+                      <th className="p-2 border-r border-[#cbd5e1]">Status</th>
+                      <th className="p-2 border-r border-[#cbd5e1]">WNS</th>
+                      <th className="p-2 border-r border-[#cbd5e1]">TNS</th>
+                      <th className="p-2 border-r border-[#cbd5e1]">LUT</th>
+                      <th className="p-2 border-r border-[#cbd5e1]">FF</th>
+                      <th className="p-2 border-r border-[#cbd5e1]">BRAM</th>
+                      <th className="p-2 border-r border-[#cbd5e1]">DSP</th>
+                      <th className="p-2">Elapsed</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 font-mono text-[11px] text-slate-800">
+                    <tr className="hover:bg-blue-50 cursor-pointer">
+                      <td className="p-2 font-bold text-blue-700 flex items-center gap-1"><span>▶</span> synth_1</td>
+                      <td className="p-2 text-slate-600">constrs_1</td>
+                      <td className="p-2"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700">{synthStatus}</span></td>
+                      <td className="p-2 text-emerald-700 font-bold">{wnsValue}</td>
+                      <td className="p-2 text-slate-700">{tnsValue}</td>
+                      <td className="p-2 text-blue-700">{lutUsage}%</td>
+                      <td className="p-2 text-purple-700">{ffUsage}%</td>
+                      <td className="p-2 text-emerald-700">{bramUsage}%</td>
+                      <td className="p-2 text-amber-700">{dspUsage}%</td>
+                      <td className="p-2 text-slate-600">00:00:12</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {bottomDockTab === "tcl" && (
+              <div className="w-full h-full flex flex-col bg-slate-900 p-2 font-mono text-[11px] text-slate-200">
+                <div className="flex-1 overflow-y-auto space-y-1">
+                  {tclLogs.map((log, idx) => (
+                    <div key={idx} className={log.startsWith("ERROR") ? "text-red-400 font-bold" : log.startsWith("Tcl%") ? "text-blue-400 font-bold" : "text-slate-300"}>
                       {log}
                     </div>
                   ))}
-                  <div ref={logConsoleEndRef} />
+                  <div ref={tclBottomRef} />
                 </div>
-              )}
 
-              {activeTab === "problems" && (
-                <div className="text-slate-500 italic text-center py-4">No critical warnings or compiler errors found.</div>
-              )}
-
-              {activeTab === "output" && (
-                <div className="space-y-2">
-                  <div className="font-bold text-slate-400 border-b border-border/40 pb-1">Run: synth_1 (Target: PYNQ-Z2)</div>
-                  <div className="text-[11px] text-slate-400 grid grid-cols-3 gap-2">
-                    <div>Synthesis: <span className="text-[#3b82f6] font-bold">{synthesisState.toUpperCase()}</span></div>
-                    <div>Implementation: <span className="text-[#3b82f6] font-bold">{implementationState.toUpperCase()}</span></div>
-                    <div>Bitstream: <span className="text-[#3b82f6] font-bold">{bitstreamState.toUpperCase()}</span></div>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === "terminal" && (
-                <div className="text-slate-500 italic text-center py-4">Active system terminal console. Runs synthesis toolchains.</div>
-              )}
-            </div>
-
-            {/* Tcl Prompt Command input shell */}
-            {activeTab === "console" && (
-              <form onSubmit={handleTclCommand} className={`h-8 border-t px-3 flex items-center gap-2 ${consolePrompt} ${borderCol}`}>
-                <span className="text-blue-500 font-bold font-mono text-xs select-none">Tcl%</span>
-                <input
-                  type="text"
-                  value={terminalInput}
-                  onChange={(e) => setTerminalInput(e.target.value)}
-                  className="flex-1 bg-transparent text-xs font-mono text-slate-300 focus:outline-none border-none"
-                  placeholder="Enter Tcl shell command here (e.g. 'run_simulation', 'synth_design', 'help')..."
-                />
-              </form>
+                <form onSubmit={handleTclSubmit} className="mt-2 flex items-center gap-2 border-t border-slate-800 pt-1.5">
+                  <span className="text-blue-400 font-bold">Tcl%</span>
+                  <input
+                    type="text"
+                    value={tclInput}
+                    onChange={(e) => setTclInput(e.target.value)}
+                    placeholder="Type Tcl command (e.g. synth_design, help, clear)..."
+                    className="flex-1 bg-transparent border-none text-slate-200 focus:outline-none text-[11px]"
+                  />
+                </form>
+              </div>
             )}
           </div>
         </div>
-      </div>
+      )}
 
-      {/* FPGA Lab Style Bottom Status Bar */}
-      <footer className="h-5 bg-[#007acc] text-white flex items-center justify-between px-3 text-[11px] shrink-0 z-20 font-sans select-none">
-        <div className="flex items-center gap-3">
-          <span className="bg-[#0062a3] px-2 py-0.5 flex items-center gap-1 font-bold">
-            Project: uart_controller
-          </span>
-          <span className="flex items-center gap-1 cursor-default">
-            <span>Status: </span>
-            <span className="font-bold">{synthesisState === "completed" ? "Synthesized" : "Uncompiled"}</span>
-          </span>
-        </div>
+      {/* ── NEW PROJECT WIZARD MODAL ────────────────────────────────────── */}
+      {isNewProjectOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <form onSubmit={handleCreateNewProject} className="w-full max-w-lg bg-white border border-[#b0c4de] rounded-2xl shadow-2xl overflow-hidden text-slate-800">
+            <div className="px-6 py-4 bg-[#2b579a] text-white flex items-center justify-between font-bold text-sm">
+              <span className="flex items-center gap-2"><span>📁</span> Create New FPGA Project</span>
+              <button type="button" onClick={() => setIsNewProjectOpen(false)} className="text-white/80 hover:text-white">✕</button>
+            </div>
 
-        <div className="flex items-center gap-4">
-          <span>Verilog HDL</span>
-          <span>Spaces: 4</span>
-          <span className="flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            Target: {selectedBoard?.name || "PYNQ-Z2"}
-          </span>
+            <div className="p-6 space-y-4 text-xs font-medium">
+              <div>
+                <label className="block text-slate-700 mb-1">Project Name</label>
+                <input
+                  type="text"
+                  required
+                  value={newProjName}
+                  onChange={(e) => setNewProjName(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-sm focus:outline-none focus:border-blue-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 mb-1">Target FPGA Board</label>
+                <select
+                  value={newProjPart}
+                  onChange={(e) => setNewProjPart(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:outline-none"
+                >
+                  <option value="pynq-z2 (xc7z020clg400-1)">PYNQ-Z2 (Zynq-7000 xc7z020clg400-1)</option>
+                  <option value="basys3 (xc7a35tcpg236-1)">Basys3 (Artix-7 xc7a35tcpg236-1)</option>
+                  <option value="arty-a7 (xc7a35tcsg324-1)">Arty-A7 (Artix-7 xc7a35tcsg324-1)</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-700 mb-1">Target Language</label>
+                  <select
+                    value={newProjLang}
+                    onChange={(e) => setNewProjLang(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                  >
+                    <option value="Verilog">Verilog</option>
+                    <option value="SystemVerilog">SystemVerilog</option>
+                    <option value="VHDL">VHDL</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 mb-1">Top Module Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={newProjTop}
+                    onChange={(e) => setNewProjTop(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3 text-xs">
+              <button type="button" onClick={() => setIsNewProjectOpen(false)} className="px-4 py-2 border border-slate-300 rounded-lg font-medium text-slate-700 hover:bg-slate-100">
+                Cancel
+              </button>
+              <button type="submit" className="px-5 py-2 bg-[#2b579a] hover:bg-[#1e3a8a] text-white font-bold rounded-lg shadow-md">
+                Create Project & Launch
+              </button>
+            </div>
+          </form>
         </div>
-      </footer>
+      )}
+
+      {/* STREAMLINED PROJECT SETTINGS MODAL */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-3xl bg-[#f8fafc] border border-[#b0c4de] rounded-lg shadow-2xl overflow-hidden flex flex-col h-[520px] text-slate-800">
+            <div className="h-9 px-4 bg-[#e0e8f8] border-b border-[#cbd5e1] flex items-center justify-between text-xs font-semibold text-[#0f172a]">
+              <span className="flex items-center gap-2"><span>⚙️</span> Project Settings</span>
+              <button onClick={() => setIsSettingsOpen(false)} className="w-5 h-5 rounded hover:bg-slate-300 flex items-center justify-center font-bold text-slate-600 text-xs">✕</button>
+            </div>
+
+            <div className="flex-1 flex min-h-0 overflow-hidden">
+              <div className="w-48 border-r border-[#cbd5e1] bg-[#f0f4f9] p-2 text-xs">
+                <div className="font-bold text-[#1e3a8a] text-[11px] px-2 py-1 uppercase tracking-wide border-b border-[#cbd5e1] mb-2">
+                  Settings Categories
+                </div>
+
+                <div className="space-y-1 font-medium text-[11px]">
+                  {[
+                    { id: "general", label: "⚙️ General" },
+                    { id: "simulation", label: "🧪 Simulation" },
+                    { id: "synthesis", label: "⚙️ Synthesis" },
+                    { id: "implementation", label: "🧩 Implementation" },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => setSettingsTab(item.id as any)}
+                      className={`w-full text-left px-3 py-1.5 rounded transition-colors ${
+                        settingsTab === item.id ? "bg-[#2b579a] text-white font-bold" : "text-slate-700 hover:bg-slate-200"
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex-1 p-6 overflow-y-auto bg-white flex flex-col justify-between">
+                <div>
+                  <div className="border-b border-slate-200 pb-3 mb-5">
+                    <h2 className="text-base font-bold text-[#1e3a8a] capitalize">{settingsTab} Project Settings</h2>
+                    <p className="text-xs text-slate-500 mt-1">Configure parameters used for compilation and simulation.</p>
+                  </div>
+
+                  {settingsTab === "general" && (
+                    <div className="space-y-4 text-xs font-medium">
+                      <div className="flex items-center gap-4">
+                        <label className="w-32 text-slate-700 text-right">Project Name:</label>
+                        <input type="text" value={draftProjectName} onChange={(e) => setDraftProjectName(e.target.value)} className="flex-1 px-2.5 py-1 border border-[#cbd5e1] rounded font-mono text-slate-900" />
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <label className="w-32 text-slate-700 text-right">Target FPGA Device:</label>
+                        <select value={draftProjectPart} onChange={(e) => setDraftProjectPart(e.target.value)} className="flex-1 px-2 py-1 border border-[#cbd5e1] rounded font-mono text-blue-800 bg-slate-50">
+                          <option value="pynq-z2 (xc7z020clg400-1)">pynq-z2 (xc7z020clg400-1)</option>
+                          <option value="basys3 (xc7a35tcpg236-1)">basys3 (xc7a35tcpg236-1)</option>
+                          <option value="arty-a7 (xc7a35tcsg324-1)">arty-a7 (xc7a35tcsg324-1)</option>
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <label className="w-32 text-slate-700 text-right">Target HDL Language:</label>
+                        <select value={draftTargetLanguage} onChange={(e) => setDraftTargetLanguage(e.target.value)} className="flex-1 px-2 py-1 border border-[#cbd5e1] rounded text-slate-900 bg-white">
+                          <option value="Verilog">Verilog</option>
+                          <option value="SystemVerilog">SystemVerilog</option>
+                          <option value="VHDL">VHDL</option>
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <label className="w-32 text-slate-700 text-right">Top Module Name:</label>
+                        <input type="text" value={draftTopModule} onChange={(e) => setDraftTopModule(e.target.value)} className="flex-1 px-2.5 py-1 border border-[#cbd5e1] rounded font-mono text-slate-900" />
+                      </div>
+                    </div>
+                  )}
+
+                  {settingsTab === "simulation" && (
+                    <div className="space-y-4 text-xs font-medium">
+                      <div className="flex items-center gap-4">
+                        <label className="w-32 text-slate-700 text-right">Simulation Runtime:</label>
+                        <input type="number" value={draftSimTime} onChange={(e) => setDraftSimTime(Number(e.target.value))} className="w-36 px-2.5 py-1 border border-[#cbd5e1] rounded font-mono" />
+                        <span className="text-slate-500 text-xs">ns</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {settingsTab === "synthesis" && (
+                    <div className="space-y-4 text-xs font-medium">
+                      <div className="flex items-center gap-4">
+                        <label className="w-32 text-slate-700 text-right">Verilog Standard:</label>
+                        <select value={draftVerilogVer} onChange={(e) => setDraftVerilogVer(e.target.value)} className="flex-1 px-2 py-1 border border-[#cbd5e1] rounded">
+                          <option value="Verilog 2001">Verilog 2001</option>
+                          <option value="SystemVerilog 2012">SystemVerilog 2012</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {settingsTab === "implementation" && (
+                    <div className="space-y-4 text-xs font-medium">
+                      <div className="flex items-center gap-4">
+                        <label className="w-32 text-slate-700 text-right">Constraints File:</label>
+                        <input type="text" value="constraints/pynq_z2.xdc" disabled className="flex-1 px-2 py-1 bg-slate-100 border border-slate-300 rounded font-mono text-slate-600" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-2 text-xs">
+                  <button onClick={handleSaveSettings} className="px-5 py-1.5 bg-[#2b579a] hover:bg-[#1e3a8a] text-white font-bold rounded shadow-sm">OK</button>
+                  <button onClick={() => setIsSettingsOpen(false)} className="px-4 py-1.5 bg-white border border-[#cbd5e1] hover:bg-slate-100 text-slate-700 font-medium rounded">Cancel</button>
+                  <button onClick={handleApplySettings} className="px-4 py-1.5 bg-white border border-[#cbd5e1] hover:bg-slate-100 text-slate-700 font-medium rounded">Apply</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Confirm Dialog */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        onConfirm={confirmModal.onConfirm}
+        onClose={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

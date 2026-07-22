@@ -39,23 +39,21 @@ class JobQueue extends EventEmitter {
    */
   private async processQueue() {
     // Get all queued jobs
-    const queuedJobs = db
+    const queuedJobs = await db
       .select()
       .from(jobs)
       .where(eq(jobs.status, "queued"))
-      .orderBy(desc(jobs.priority), jobs.createdAt)
-      .all();
+      .orderBy(desc(jobs.priority), jobs.createdAt);
 
     for (const job of queuedJobs) {
       // Check if board is locked (already being programmed)
       if (this.boardLocks.get(job.boardId)) continue;
 
       // Check board status
-      const board = db
+      const [board] = await db
         .select()
         .from(boards)
-        .where(eq(boards.id, job.boardId))
-        .get();
+        .where(eq(boards.id, job.boardId));
 
       if (!board || board.status === "offline") continue;
 
@@ -66,11 +64,10 @@ class JobQueue extends EventEmitter {
 
       if (board.status === "allocated" || board.status === "busy") {
         // Only allow if the board is allocated to the user who submitted the job
-        const activeSession = db
+        const [activeSession] = await db
           .select()
           .from(hwSessions)
-          .where(and(eq(hwSessions.boardId, job.boardId), eq(hwSessions.status, "active")))
-          .get();
+          .where(and(eq(hwSessions.boardId, job.boardId), eq(hwSessions.status, "active")));
 
         if (activeSession && activeSession.userId === job.userId) {
           // It's their board, allow reprogramming
@@ -98,19 +95,17 @@ class JobQueue extends EventEmitter {
   ) {
     try {
       // Update job status
-      db.update(jobs)
+      await db.update(jobs)
         .set({
           status: "programming",
           startedAt: new Date().toISOString(),
         })
-        .where(eq(jobs.id, job.id))
-        .run();
+        .where(eq(jobs.id, job.id));
 
       // Update board status
-      db.update(boards)
+      await db.update(boards)
         .set({ status: "programming" })
-        .where(eq(boards.id, board.id))
-        .run();
+        .where(eq(boards.id, board.id));
 
       // Create programmer instance
       const programmer = new FPGAProgrammer();
@@ -121,17 +116,37 @@ class JobQueue extends EventEmitter {
         this.emit("job-log", { jobId: job.id, boardId: board.id, text });
       });
 
-      // Program the FPGA
-      const result = await programmer.program({
-        boardType: board.boardType,
-        bitstreamPath: job.bitstreamPath,
-        programmingTool: board.programmingTool || "openFPGALoader",
-        devicePath: board.devicePath,
-        ipAddress: board.ipAddress,
-        sshUsername: board.sshUsername,
-        sshPassword: board.sshPassword,
-        timeout: 120000,
-      });
+      // Program the FPGA (with up to 3 retry attempts for USB/JTAG transient issues)
+      let result: any = { success: false, logs: "", exitCode: null, duration: 0 };
+      let attempt = 1;
+      const maxAttempts = 3;
+
+      while (attempt <= maxAttempts) {
+        if (attempt > 1) {
+          programmer.emit("log", `\n[Queue] Retrying programming (attempt ${attempt}/${maxAttempts})...\n`);
+        }
+        
+        result = await programmer.program({
+          boardType: board.boardType,
+          bitstreamPath: job.bitstreamPath,
+          programmingTool: board.programmingTool || "openFPGALoader",
+          devicePath: board.devicePath,
+          ipAddress: board.ipAddress,
+          sshUsername: board.sshUsername,
+          sshPassword: board.sshPassword,
+          timeout: 120000,
+        });
+
+        if (result.success) {
+          break;
+        }
+
+        attempt++;
+        if (attempt <= maxAttempts) {
+          // Wait 2 seconds before retrying to let the JTAG connection/USB controller settle
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+      }
 
       if (result.success) {
         // Create hardware session
@@ -141,7 +156,7 @@ class JobQueue extends EventEmitter {
         ).toISOString();
         const sessionId = uuid();
 
-        db.insert(hwSessions)
+        await db.insert(hwSessions)
           .values({
             id: sessionId,
             userId: job.userId,
@@ -149,24 +164,21 @@ class JobQueue extends EventEmitter {
             jobId: job.id,
             expiresAt,
             status: "active",
-          })
-          .run();
+          });
 
         // Update board with session
-        db.update(boards)
+        await db.update(boards)
           .set({ status: "allocated", currentSessionId: sessionId })
-          .where(eq(boards.id, board.id))
-          .run();
+          .where(eq(boards.id, board.id));
 
         // Update job
-        db.update(jobs)
+        await db.update(jobs)
           .set({
             status: "success",
             logs: result.logs,
             completedAt: new Date().toISOString(),
           })
-          .where(eq(jobs.id, job.id))
-          .run();
+          .where(eq(jobs.id, job.id));
 
         this.emit("job-complete", {
           jobId: job.id,
@@ -175,20 +187,31 @@ class JobQueue extends EventEmitter {
           success: true,
         });
       } else {
-        // Failed — release board
-        db.update(boards)
-          .set({ status: "free" })
-          .where(eq(boards.id, board.id))
-          .run();
+        // Check if there is already an active session on this board to preserve
+        const [activeSession] = await db
+          .select()
+          .from(hwSessions)
+          .where(and(eq(hwSessions.boardId, board.id), eq(hwSessions.status, "active")));
 
-        db.update(jobs)
+        if (activeSession) {
+          // Restore the allocated status so the user doesn't lose their session
+          await db.update(boards)
+            .set({ status: "allocated", currentSessionId: activeSession.id })
+            .where(eq(boards.id, board.id));
+        } else {
+          // Release board back to free pool
+          await db.update(boards)
+            .set({ status: "free", currentSessionId: null })
+            .where(eq(boards.id, board.id));
+        }
+
+        await db.update(jobs)
           .set({
             status: "failed",
             logs: result.logs,
             completedAt: new Date().toISOString(),
           })
-          .where(eq(jobs.id, job.id))
-          .run();
+          .where(eq(jobs.id, job.id));
 
         this.emit("job-complete", {
           jobId: job.id,
@@ -199,19 +222,17 @@ class JobQueue extends EventEmitter {
     } catch (error) {
       console.error(`[Queue] Job ${job.id} error:`, error);
 
-      db.update(jobs)
+      await db.update(jobs)
         .set({
           status: "failed",
           logs: `Internal error: ${error}`,
           completedAt: new Date().toISOString(),
         })
-        .where(eq(jobs.id, job.id))
-        .run();
+        .where(eq(jobs.id, job.id));
 
-      db.update(boards)
+      await db.update(boards)
         .set({ status: "free" })
-        .where(eq(boards.id, board.id))
-        .run();
+        .where(eq(boards.id, board.id));
     } finally {
       this.boardLocks.set(job.boardId, false);
       this.activeProgrammers.delete(board.id);

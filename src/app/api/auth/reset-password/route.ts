@@ -19,12 +19,10 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
 
-  // Lookup the reset token
-  const dbToken = db
+  const [dbToken] = await db
     .select()
     .from(passwordResetTokens)
-    .where(eq(passwordResetTokens.tokenHash, tokenHash))
-    .get();
+    .where(eq(passwordResetTokens.tokenHash, tokenHash));
 
   if (!dbToken) {
     return NextResponse.json({ error: "Invalid or expired password reset token" }, { status: 400 });
@@ -32,15 +30,14 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   // Check if token expired
   if (new Date(dbToken.expiresAt) < new Date()) {
-    db.delete(passwordResetTokens).where(eq(passwordResetTokens.id, dbToken.id)).run();
+    await db.delete(passwordResetTokens).where(eq(passwordResetTokens.id, dbToken.id));
     return NextResponse.json({ error: "Password reset token has expired" }, { status: 400 });
   }
 
-  const user = db
+  const [user] = await db
     .select()
     .from(users)
-    .where(eq(users.id, dbToken.userId))
-    .get();
+    .where(eq(users.id, dbToken.userId));
 
   if (!user) {
     return NextResponse.json({ error: "User not found" }, { status: 400 });
@@ -51,20 +48,19 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const newTokenVersion = (user.tokenVersion || 1) + 1;
 
   // Transactionally update password, increment token version, unlock account, delete tokens
-  db.update(users)
+  await db.update(users)
     .set({
       passwordHash,
       tokenVersion: newTokenVersion,
       lockedUntil: null,
     })
-    .where(eq(users.id, user.id))
-    .run();
+    .where(eq(users.id, user.id));
 
   // Invalidate all active sessions / refresh tokens of this user
-  db.delete(refreshTokens).where(eq(refreshTokens.userId, user.id)).run();
+  await db.delete(refreshTokens).where(eq(refreshTokens.userId, user.id));
 
   // Delete used reset token
-  db.delete(passwordResetTokens).where(eq(passwordResetTokens.id, dbToken.id)).run();
+  await db.delete(passwordResetTokens).where(eq(passwordResetTokens.id, dbToken.id));
 
   return NextResponse.json({ message: "Password has been reset successfully" });
 });

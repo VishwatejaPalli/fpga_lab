@@ -1,0 +1,17 @@
+[Unit]
+Description=Ngrok Tunnel for FPGA Lab
+After=network.target fpga-lab.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+EnvironmentFile=/opt/fpga-lab/.env.local
+# APP_PORT, NGROK_AUTHTOKEN, and NGROK_DOMAIN are loaded from .env.local
+# ngrok installed via snap lives at /snap/bin/ngrok, via apt at /usr/bin/ngrok
+ExecStart=/bin/bash -c 'NGROK=$(which ngrok 2>/dev/null || echo /snap/bin/ngrok); exec $NGROK http --domain=${NGROK_DOMAIN} ${APP_PORT}'
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

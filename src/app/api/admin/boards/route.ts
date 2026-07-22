@@ -31,7 +31,7 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const allBoards = db.select().from(boards).all();
+  const allBoards = await db.select().from(boards);
   const parsed = allBoards.map((b) => ({
     ...b,
     sshPassword: b.sshPassword ? decryptSafe(b.sshPassword) : null,
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     const id = uuid();
     const encryptedPassword = data.sshPassword ? encrypt(data.sshPassword) : null;
 
-    db.insert(boards)
+    await db.insert(boards)
       .values({
         id,
         name: data.name,
@@ -81,8 +81,7 @@ export async function POST(req: NextRequest) {
         capabilities: JSON.stringify(data.capabilities),
         sessionTimeoutMinutes: data.sessionTimeoutMinutes,
         status: "free",
-      })
-      .run();
+      });
 
     return NextResponse.json({ id, message: "Board created" }, { status: 201 });
   } catch (error) {
@@ -118,7 +117,7 @@ export async function PATCH(req: NextRequest) {
     const data = parsed.data;
     const encryptedPassword = data.sshPassword ? encrypt(data.sshPassword) : null;
 
-    db.update(boards)
+    await db.update(boards)
       .set({
         name: data.name,
         fpgaFamily: data.fpgaFamily,
@@ -136,8 +135,7 @@ export async function PATCH(req: NextRequest) {
         capabilities: JSON.stringify(data.capabilities),
         sessionTimeoutMinutes: data.sessionTimeoutMinutes,
       })
-      .where(eq(boards.id, id))
-      .run();
+      .where(eq(boards.id, id));
 
     return NextResponse.json({ id, message: "Board updated" });
   } catch (error) {
@@ -163,6 +161,6 @@ export async function DELETE(req: NextRequest) {
     );
   }
 
-  db.delete(boards).where(eq(boards.id, id)).run();
+  await db.delete(boards).where(eq(boards.id, id));
   return NextResponse.json({ message: "Board deleted" });
 }

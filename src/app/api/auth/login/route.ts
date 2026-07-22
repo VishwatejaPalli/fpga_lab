@@ -23,11 +23,10 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     );
   }
 
-  const user = db
+  const [user] = await db
     .select()
     .from(users)
-    .where(eq(users.email, email.toLowerCase()))
-    .get();
+    .where(eq(users.email, email.toLowerCase()));
 
   // Check user lock status
   if (user && user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
@@ -39,7 +38,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   // Persistent SQLite-backed rate limiting per email + IP
-  const limit = checkRateLimit({
+  const limit = await checkRateLimit({
     email: email.toLowerCase(),
     ipAddress: ip,
     maxAttempts: 5,
@@ -49,10 +48,9 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   if (!limit.allowed) {
     if (user) {
       // Lock account for 15 minutes in DB
-      db.update(users)
+      await db.update(users)
         .set({ lockedUntil: new Date(Date.now() + 15 * 60 * 1000).toISOString() })
-        .where(eq(users.id, user.id))
-        .run();
+        .where(eq(users.id, user.id));
         
       logAuditEvent({
         userId: user.id,
@@ -98,72 +96,69 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   // Success: Clear login attempts rate limit and remove lockout if present
-  clearRateLimit(email.toLowerCase(), ip);
+  await clearRateLimit(email.toLowerCase(), ip);
   if (user.lockedUntil) {
-    db.update(users)
+    await db.update(users)
       .set({ lockedUntil: null })
-      .where(eq(users.id, user.id))
-      .run();
+      .where(eq(users.id, user.id));
   }
 
-    db.update(users)
-      .set({ lastLogin: new Date().toISOString() })
-      .where(eq(users.id, user.id))
-      .run();
+  await db.update(users)
+    .set({ lastLogin: new Date().toISOString() })
+    .where(eq(users.id, user.id));
 
-    const token = signToken({
+  const token = signToken({
+    userId: user.id,
+    email: user.email,
+    role: user.role,
+    version: user.tokenVersion || 1,
+  });
+
+  // Generate opaque refresh token
+  const rawRefreshToken = crypto.randomBytes(40).toString("hex");
+  const tokenHash = crypto.createHash("sha256").update(rawRefreshToken).digest("hex");
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
+
+  // Store in DB
+  await db.insert(refreshTokens)
+    .values({
+      id: uuid(),
       userId: user.id,
-      email: user.email,
-      role: user.role,
-      version: user.tokenVersion || 1,
-    });
-
-    // Generate opaque refresh token
-    const rawRefreshToken = crypto.randomBytes(40).toString("hex");
-    const tokenHash = crypto.createHash("sha256").update(rawRefreshToken).digest("hex");
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
-
-    // Store in DB
-    db.insert(refreshTokens)
-      .values({
-        id: uuid(),
-        userId: user.id,
-        tokenHash,
-        expiresAt,
-        userAgent: req.headers.get("user-agent") || null,
-        ipAddress: ip,
-      })
-      .run();
-
-    const response = NextResponse.json({
-      message: "Login successful",
-      user: { id: user.id, email: user.email, name: user.name, role: user.role },
-    });
-
-    // Set 15-minute access token cookie
-    response.cookies.set("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 15 * 60, // 15 minutes
-      path: "/",
-    });
-
-    // Set 7-day refresh token cookie
-    response.cookies.set("refreshToken", rawRefreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-      path: "/",
-    });
-
-    logAuditEvent({
-      userId: user.id,
-      action: "login",
-      ipAddress: ip,
+      tokenHash,
+      expiresAt,
       userAgent: req.headers.get("user-agent") || null,
+      ipAddress: ip,
     });
 
-    return response;
+  const response = NextResponse.json({
+    message: "Login successful",
+    user: { id: user.id, email: user.email, name: user.name, role: user.role },
+  });
+
+  // Set 15-minute access token cookie
+  response.cookies.set("token", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 15 * 60, // 15 minutes
+    path: "/",
+  });
+
+  // Set 7-day refresh token cookie
+  response.cookies.set("refreshToken", rawRefreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 60 * 60 * 24 * 7, // 7 days
+    path: "/",
+  });
+
+  logAuditEvent({
+    userId: user.id,
+    action: "login",
+    ipAddress: ip,
+    userAgent: req.headers.get("user-agent") || null,
+  });
+
+  return response;
 });

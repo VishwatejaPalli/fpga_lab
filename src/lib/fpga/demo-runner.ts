@@ -141,20 +141,19 @@ export async function runDemoJob(
   bitstreamName: string
 ): Promise<void> {
   // Look up the board for context
-  const board = db.select().from(boards).where(eq(boards.id, boardId)).get();
+  const [board] = await db.select().from(boards).where(eq(boards.id, boardId));
   const boardName = board?.name || "Basys 3";
 
   // Look up job to get bitstreamPath
-  const job = db.select().from(jobs).where(eq(jobs.id, jobId)).get();
+  const [job] = await db.select().from(jobs).where(eq(jobs.id, jobId));
   const bitstreamPath = job?.bitstreamPath || "";
 
   const logSequence = getDemoLogSequence(bitstreamName, boardName, bitstreamPath);
 
   // Update job to "programming"
-  db.update(jobs)
+  await db.update(jobs)
     .set({ status: "programming" })
-    .where(eq(jobs.id, jobId))
-    .run();
+    .where(eq(jobs.id, jobId));
 
 
   // Wait for WebSocket clients to connect before streaming logs
@@ -181,7 +180,7 @@ export async function runDemoJob(
   const timeoutMinutes = board?.sessionTimeoutMinutes || 30;
   const expiresAt = new Date(Date.now() + timeoutMinutes * 60 * 1000).toISOString();
 
-  db.insert(hwSessions)
+  await db.insert(hwSessions)
     .values({
       id: sessionId,
       userId,
@@ -189,24 +188,21 @@ export async function runDemoJob(
       jobId,
       status: "active",
       expiresAt,
-    })
-    .run();
+    });
 
   // Update board status
-  db.update(boards)
+  await db.update(boards)
     .set({ status: "allocated" })
-    .where(eq(boards.id, boardId))
-    .run();
+    .where(eq(boards.id, boardId));
 
   // Update job to success
-  db.update(jobs)
+  await db.update(jobs)
     .set({
       status: "success",
       logs: allLogs.join(""),
       completedAt: new Date().toISOString(),
     })
-    .where(eq(jobs.id, jobId))
-    .run();
+    .where(eq(jobs.id, jobId));
 
   // Emit completion event
   if (globalThis.__jobQueue) {

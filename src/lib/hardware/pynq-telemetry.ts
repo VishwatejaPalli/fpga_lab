@@ -307,7 +307,7 @@ export async function fetchPynqTelemetry(
   }
 
   // Look up board in DB
-  const board = db.select().from(boards).where(eq(boards.id, boardId)).get();
+  const [board] = await db.select().from(boards).where(eq(boards.id, boardId));
 
   if (!board || !board.ipAddress) {
     throw new Error(`Board ${boardId} not found or IP not configured`);
@@ -336,7 +336,7 @@ export async function fetchPynqTelemetry(
  */
 export async function checkPynqOnline(boardId: string): Promise<boolean> {
   try {
-    const board = db.select().from(boards).where(eq(boards.id, boardId)).get();
+    const [board] = await db.select().from(boards).where(eq(boards.id, boardId));
     if (!board || !board.ipAddress) return false;
 
     const _require = eval("require") as NodeRequire;

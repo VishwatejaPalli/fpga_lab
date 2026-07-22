@@ -53,9 +53,9 @@ function decodeJwtPayload(
     while (base64.length % 4) base64 += "=";
     const jsonStr = decodeURIComponent(
       atob(base64)
-        .split("")
-        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
+         .split("")
+         .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+         .join("")
     );
     return JSON.parse(jsonStr);
   } catch {
@@ -65,6 +65,55 @@ function decodeJwtPayload(
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // 1. CSRF Protection for state-mutating requests (POST, PUT, DELETE, PATCH)
+  if (["POST", "PUT", "DELETE", "PATCH"].includes(req.method)) {
+    const origin = req.headers.get("origin");
+    const referer = req.headers.get("referer");
+    const hasAuthHeader = req.headers.has("authorization");
+
+    // Retrieve allowed hosts (request host + public app URL proxy host + x-forwarded-host)
+    const allowedHosts = [req.nextUrl.host];
+    const hostHeader = req.headers.get("host");
+    if (hostHeader) allowedHosts.push(hostHeader);
+    const forwardedHost = req.headers.get("x-forwarded-host");
+    if (forwardedHost) allowedHosts.push(forwardedHost);
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (appUrl) {
+      try {
+        allowedHosts.push(new URL(appUrl).host);
+      } catch {}
+    }
+
+    // CSRF is only a threat for cookie-authenticated requests. API requests using Bearer token/auth header are safe.
+    if (!hasAuthHeader) {
+      if (origin) {
+        try {
+          const originUrl = new URL(origin);
+          if (!allowedHosts.includes(originUrl.host) && !allowedHosts.includes(originUrl.hostname)) {
+            return NextResponse.json({ error: "CSRF verification failed: Invalid origin" }, { status: 403 });
+          }
+        } catch {
+          return NextResponse.json({ error: "CSRF verification failed: Malformed origin" }, { status: 403 });
+        }
+      } else if (referer) {
+        try {
+          const refererUrl = new URL(referer);
+          if (!allowedHosts.includes(refererUrl.host) && !allowedHosts.includes(refererUrl.hostname)) {
+            return NextResponse.json({ error: "CSRF verification failed: Invalid referer" }, { status: 403 });
+          }
+        } catch {
+          return NextResponse.json({ error: "CSRF verification failed: Malformed referer" }, { status: 403 });
+        }
+      } else {
+        // Block API mutations missing both origin and referer headers
+        if (pathname.startsWith("/api/")) {
+          return NextResponse.json({ error: "CSRF verification failed: Missing origin and referer" }, { status: 403 });
+        }
+      }
+    }
+  }
 
   // Public paths — no auth required.
   const publicPaths = [
@@ -95,11 +144,9 @@ export async function proxy(req: NextRequest) {
   const token = req.cookies.get("token")?.value;
 
   if (!token) {
-    // API routes return 401.
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    // Pages redirect to login.
     return NextResponse.redirect(new URL("/auth/login", req.url));
   }
 

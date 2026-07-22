@@ -14,7 +14,7 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const activeSession = db
+  const [activeSession] = await db
     .select()
     .from(hwSessions)
     .where(
@@ -22,8 +22,7 @@ export async function GET() {
         eq(hwSessions.userId, session.userId),
         eq(hwSessions.status, "active")
       )
-    )
-    .get();
+    );
 
   return NextResponse.json({ session: activeSession || null });
 }
@@ -37,13 +36,27 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { sessionId } = await req.json();
+  const { sessionId, boardId } = await req.json();
 
-  const hwSession = db
-    .select()
-    .from(hwSessions)
-    .where(eq(hwSessions.id, sessionId))
-    .get();
+  let hwSession;
+  if (sessionId) {
+    const sessions = await db
+      .select()
+      .from(hwSessions)
+      .where(eq(hwSessions.id, sessionId));
+    hwSession = sessions[0];
+  } else if (boardId) {
+    const sessions = await db
+      .select()
+      .from(hwSessions)
+      .where(
+        and(
+          eq(hwSessions.boardId, boardId),
+          eq(hwSessions.status, "active")
+        )
+      );
+    hwSession = sessions[0];
+  }
 
   if (!hwSession) {
     return NextResponse.json(

@@ -1,12 +1,11 @@
 [Unit]
 Description=FPGA Lab Remote Access Server
-Documentation=https://github.com/your-org/fpga-lab
 After=network.target
 
 [Service]
 Type=simple
-User=fpga-lab
-Group=fpga-lab
+User=root
+Group=root
 WorkingDirectory=/opt/fpga-lab
 ExecStart=/usr/bin/node server.js
 Restart=on-failure
@@ -14,9 +13,8 @@ RestartSec=5
 StandardOutput=journal
 StandardError=journal
 
-# Environment
+# Environment — all vars loaded from .env.local
 Environment=NODE_ENV=production
-Environment=APP_PORT=3000
 EnvironmentFile=/opt/fpga-lab/.env.local
 
 # Security hardening

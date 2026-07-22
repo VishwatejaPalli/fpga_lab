@@ -17,7 +17,7 @@ export async function GET() {
   if (!cfg.canGenerateApiKeys)
     return NextResponse.json({ error: "Researcher account required" }, { status: 403 });
 
-  const keys = sqlite
+  const keys = await sqlite
     .prepare(
       "SELECT id, name, prefix, last_used_at, expires_at, created_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC"
     )
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Key name required" }, { status: 400 });
 
   // Max 5 keys per user
-  const countRow = sqlite
+  const countRow = await sqlite
     .prepare("SELECT COUNT(*) as c FROM api_keys WHERE user_id = ?")
     .get(session.userId) as CountRow | undefined;
   const count = countRow?.c || 0;
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
     ? new Date(Date.now() + expiresInDays * 86400000).toISOString()
     : null;
 
-  sqlite
+  await sqlite
     .prepare("INSERT INTO api_keys (id, user_id, name, key_hash, prefix, expires_at) VALUES (?, ?, ?, ?, ?, ?)")
     .run(id, session.userId, name.trim(), keyHash, prefix, expiresAt);
 
@@ -76,6 +76,6 @@ export async function DELETE(req: NextRequest) {
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "Key ID required" }, { status: 400 });
 
-  sqlite.prepare("DELETE FROM api_keys WHERE id = ? AND user_id = ?").run(id, session.userId);
+  await sqlite.prepare("DELETE FROM api_keys WHERE id = ? AND user_id = ?").run(id, session.userId);
   return NextResponse.json({ success: true });
 }

@@ -39,11 +39,10 @@ class SessionEnforcer {
    * Check for and cleanup expired sessions.
    */
   private async check() {
-    const activeSessions = db
+    const activeSessions = await db
       .select()
       .from(hwSessions)
-      .where(eq(hwSessions.status, "active"))
-      .all();
+      .where(eq(hwSessions.status, "active"));
 
     const now = new Date();
 
@@ -119,11 +118,10 @@ class SessionEnforcer {
       sshService.close(session.boardId);
 
       // Get board for reset
-      const board = db
+      const [board] = await db
         .select()
         .from(boards)
-        .where(eq(boards.id, session.boardId))
-        .get();
+        .where(eq(boards.id, session.boardId));
 
       if (board) {
         const blankPath = board.blankBitstreamPath || process.env.BLANK_BITSTREAM_PATH;
@@ -163,25 +161,22 @@ class SessionEnforcer {
 
         if (resetSuccess) {
           // Release board
-          db.update(boards)
+          await db.update(boards)
             .set({ status: "free", currentSessionId: null })
-            .where(eq(boards.id, board.id))
-            .run();
+            .where(eq(boards.id, board.id));
         } else {
           // Reset failed, mark board as offline for admin intervention
           console.error(`[Enforcer] Failed to reset board ${board.id}. Marking offline.`);
-          db.update(boards)
+          await db.update(boards)
             .set({ status: "offline", currentSessionId: null })
-            .where(eq(boards.id, board.id))
-            .run();
+            .where(eq(boards.id, board.id));
         }
       }
 
       // Mark session complete
-      db.update(hwSessions)
+      await db.update(hwSessions)
         .set({ status })
-        .where(eq(hwSessions.id, session.id))
-        .run();
+        .where(eq(hwSessions.id, session.id));
 
       console.log(`[Sessions] Session ${session.id} cleaned up`);
     } catch (error) {

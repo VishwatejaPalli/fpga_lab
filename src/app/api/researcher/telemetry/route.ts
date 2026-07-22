@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Fetch successful jobs to parse resource usage
-  const successJobs = sqlite
+  const successJobs = await sqlite
     .prepare(
       `SELECT j.id, j.bitstream_name, j.logs, j.completed_at, b.name as board_name
        FROM jobs j
@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
 
   // Generate realistic time-series telemetry data for the main boards
   const telemetryHistory = [];
-  const dbBoards = sqlite.prepare("SELECT name, fpga_family, board_type FROM boards").all() as { name: string; fpga_family: string; board_type: string }[];
+  const dbBoards = await sqlite.prepare("SELECT name, fpga_family, board_type FROM boards").all() as { name: string; fpga_family: string; board_type: string }[];
   
   const boardsData = dbBoards.length > 0
     ? dbBoards

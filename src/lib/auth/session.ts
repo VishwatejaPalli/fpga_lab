@@ -26,7 +26,7 @@ export async function getSession(): Promise<JWTPayload | null> {
   if (token) {
     const payload = verifyToken(token);
     if (payload) {
-      const user = sqlite
+      const user = await sqlite
         .prepare("SELECT token_version, status FROM users WHERE id = ?")
         .get(payload.userId) as { token_version: number; status: string } | undefined;
       
@@ -44,7 +44,7 @@ export async function getSession(): Promise<JWTPayload | null> {
       const apiKey = authHeader.substring(7).trim();
       const hash = createHash("sha256").update(apiKey).digest("hex");
 
-      const keyRow = sqlite
+      const keyRow = await sqlite
         .prepare("SELECT id, user_id, expires_at FROM api_keys WHERE key_hash = ?")
         .get(hash) as ApiKeyRow | undefined;
 
@@ -56,7 +56,7 @@ export async function getSession(): Promise<JWTPayload | null> {
 
         // Update last_used_at timestamp asynchronously/non-blocking
         try {
-          sqlite
+          await sqlite
             .prepare("UPDATE api_keys SET last_used_at = datetime('now') WHERE id = ?")
             .run(keyRow.id);
         } catch (e) {
@@ -64,7 +64,7 @@ export async function getSession(): Promise<JWTPayload | null> {
         }
 
         // Fetch user details
-        const userRow = sqlite
+        const userRow = await sqlite
           .prepare("SELECT id, email, name, role FROM users WHERE id = ?")
           .get(keyRow.user_id) as UserRow | undefined;
 

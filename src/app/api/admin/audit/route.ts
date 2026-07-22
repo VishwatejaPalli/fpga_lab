@@ -15,13 +15,12 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 100);
   const offset = parseInt(searchParams.get("offset") || "0");
 
-  const logs = db
+  const logs = await db
     .select()
     .from(auditLogs)
     .orderBy(desc(auditLogs.createdAt))
     .limit(limit)
-    .offset(offset)
-    .all();
+    .offset(offset);
 
   return NextResponse.json({ logs });
 });

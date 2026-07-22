@@ -9,7 +9,7 @@ export async function GET() {
     const uptime = Math.floor((Date.now() - startupTime) / 1000);
     
     // Get board counts
-    const boards = sqlite
+    const boards = await sqlite
       .prepare("SELECT status, COUNT(*) as count FROM boards GROUP BY status")
       .all() as { status: string; count: number }[];
       
@@ -31,7 +31,7 @@ export async function GET() {
     }
     
     // Fetch detailed boards list
-    const boardList = sqlite
+    const boardList = await sqlite
       .prepare("SELECT id, name, board_type, fpga_family, status, connection_type FROM boards")
       .all() as any[];
       
@@ -45,7 +45,7 @@ export async function GET() {
     }));
 
     // Fetch detailed recent jobs list
-    const recentJobsList = sqlite
+    const recentJobsList = await sqlite
       .prepare("SELECT id, bitstream_name, status, board_id, created_at FROM jobs ORDER BY created_at DESC LIMIT 10")
       .all() as any[];
       
@@ -58,12 +58,12 @@ export async function GET() {
     }));
 
     // Get active sessions
-    const activeSessionsRow = sqlite
+    const activeSessionsRow = await sqlite
       .prepare("SELECT COUNT(*) as count FROM hw_sessions WHERE status = 'active'")
       .get() as { count: number } | undefined;
       
     // Get queue depth
-    const queueDepthRow = sqlite
+    const queueDepthRow = await sqlite
       .prepare("SELECT COUNT(*) as count FROM jobs WHERE status = 'queued'")
       .get() as { count: number } | undefined;
 

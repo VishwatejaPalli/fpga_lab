@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Navbar from "@/components/navbar";
+import ConfirmModal from "@/components/confirm-modal";
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const fpgaUsageData = [
@@ -114,6 +115,20 @@ export default function AdminPage() {
   const [detecting, setDetecting] = useState(false);
   const [detectedDevices, setDetectedDevices] = useState<{ hardware: any[]; serialPorts: string[]; cameras: string[]; rawOutput?: string } | null>(null);
 
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    variant?: "danger" | "warning" | "info";
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  });
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -127,10 +142,10 @@ export default function AdminPage() {
       if (res.ok) {
         setDetectedDevices(data);
       } else {
-        alert(data.error || "Detection failed");
+        setMessage(`Error: ${data.error || "Detection failed"}`);
       }
-    } catch (err) {
-      alert("Network error during detection");
+    } catch {
+      setMessage("Error: Network error during detection");
     } finally {
       setDetecting(false);
     }
@@ -231,19 +246,33 @@ export default function AdminPage() {
     }
   }
 
-  async function handleDeleteBoard(id: string) {
-    if (!confirm("Are you sure you want to delete this board?")) return;
-
-    try {
-      await fetch("/api/admin/boards", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
-      fetchData();
-    } catch {
-      alert("Failed to delete board");
-    }
+  function handleDeleteBoard(id: string, boardName?: string) {
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Board",
+      message: `Are you sure you want to delete board "${boardName || id}"? This action cannot be undone.`,
+      confirmText: "Delete Board",
+      variant: "danger",
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        try {
+          const res = await fetch("/api/admin/boards", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id }),
+          });
+          if (res.ok) {
+            setMessage("Board deleted successfully!");
+            fetchData();
+          } else {
+            const data = await res.json();
+            setMessage(`Error: ${data.error || "Failed to delete board"}`);
+          }
+        } catch {
+          setMessage("Error: Failed to delete board");
+        }
+      },
+    });
   }
 
   async function handleRoleChange(userId: string, newRole: string) {
@@ -255,37 +284,47 @@ export default function AdminPage() {
         body: JSON.stringify({ userId, role: newRole }),
       });
       if (res.ok) {
+        setMessage(`User role updated to ${newRole}`);
         fetchData();
       } else {
         const data = await res.json();
-        alert(data.error || "Failed to update role");
+        setMessage(`Error: ${data.error || "Failed to update role"}`);
       }
     } catch {
-      alert("Failed to update role");
+      setMessage("Error: Failed to update role");
     } finally {
       setUpdatingRole(null);
     }
   }
 
-  async function handleDeleteUser(userId: string) {
-    if (!confirm("Are you sure you want to delete this user? This action cannot be undone.")) return;
-    
-    setUpdatingRole(userId);
-    try {
-      const res = await fetch(`/api/admin/users?userId=${userId}`, {
-        method: "DELETE",
-      });
-      if (res.ok) {
-        fetchData();
-      } else {
-        const data = await res.json();
-        alert(data.error || "Failed to delete user");
-      }
-    } catch {
-      alert("Failed to delete user");
-    } finally {
-      setUpdatingRole(null);
-    }
+  function handleDeleteUser(userId: string, userName?: string) {
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete User",
+      message: `Are you sure you want to delete user "${userName || userId}"? This action cannot be undone.`,
+      confirmText: "Delete User",
+      variant: "danger",
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        setUpdatingRole(userId);
+        try {
+          const res = await fetch(`/api/admin/users?userId=${userId}`, {
+            method: "DELETE",
+          });
+          if (res.ok) {
+            setMessage("User deleted successfully!");
+            fetchData();
+          } else {
+            const data = await res.json();
+            setMessage(`Error: ${data.error || "Failed to delete user"}`);
+          }
+        } catch {
+          setMessage("Error: Failed to delete user");
+        } finally {
+          setUpdatingRole(null);
+        }
+      },
+    });
   }
 
   function toggleCapability(cap: string) {
@@ -565,7 +604,7 @@ export default function AdminPage() {
                         Edit
                       </button>
                       <button
-                        onClick={() => handleDeleteBoard(board.id)}
+                        onClick={() => handleDeleteBoard(board.id, board.name)}
                         className="text-danger hover:text-danger/80 text-sm"
                       >
                         Delete
@@ -719,7 +758,7 @@ export default function AdminPage() {
                         </td>
                         <td className="py-3 text-right">
                           <button
-                            onClick={() => handleDeleteUser(user.id)}
+                            onClick={() => handleDeleteUser(user.id, user.name)}
                             disabled={updatingRole === user.id}
                             className="text-danger hover:text-danger/80 text-xs font-medium"
                           >
@@ -1187,6 +1226,16 @@ export default function AdminPage() {
         </div>
         )}
       </main>
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        variant={confirmModal.variant}
+        onConfirm={confirmModal.onConfirm}
+        onClose={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

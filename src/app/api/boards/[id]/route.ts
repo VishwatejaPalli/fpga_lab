@@ -15,7 +15,7 @@ export async function GET(
 
   const { id } = await params;
 
-  const board = db.select().from(boards).where(eq(boards.id, id)).get();
+  const [board] = await db.select().from(boards).where(eq(boards.id, id));
 
   if (!board) {
     return NextResponse.json({ error: "Board not found" }, { status: 404 });

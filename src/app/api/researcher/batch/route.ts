@@ -22,21 +22,23 @@ export async function GET() {
   if (!cfg.canBatchProgram)
     return NextResponse.json({ error: "Researcher account required" }, { status: 403 });
 
-  const batches = sqlite
+  const batches = await sqlite
     .prepare("SELECT * FROM batch_jobs WHERE user_id = ? ORDER BY created_at DESC LIMIT 20")
     .all(session.userId);
 
-  const batchesWithJobs = batches.map((batch: any) => {
-    const jobs = sqlite
-      .prepare(`
-        SELECT j.id, j.board_id, j.status, j.created_at, j.completed_at, b.name as board_name
-        FROM jobs j
-        JOIN boards b ON j.board_id = b.id
-        WHERE j.batch_id = ?
-      `)
-      .all(batch.id);
-    return { ...batch, jobs };
-  });
+  const batchesWithJobs = await Promise.all(
+    batches.map(async (batch: any) => {
+      const jobs = await sqlite
+        .prepare(`
+          SELECT j.id, j.board_id, j.status, j.created_at, j.completed_at, b.name as board_name
+          FROM jobs j
+          JOIN boards b ON j.board_id = b.id
+          WHERE j.batch_id = ?
+        `)
+        .all(batch.id);
+      return { ...batch, jobs };
+    })
+  );
 
   return NextResponse.json({ batches: batchesWithJobs });
 }
@@ -59,13 +61,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Max 10 boards per batch" }, { status: 400 });
 
   const batchId = uuid();
-  sqlite
+  await sqlite
     .prepare("INSERT INTO batch_jobs (id, user_id, name, status, total_boards) VALUES (?, ?, ?, 'running', ?)")
     .run(batchId, session.userId, name || "Batch Programming", boardIds.length);
 
   const jobIds: string[] = [];
   for (const boardId of boardIds) {
-    const board = sqlite
+    const board = await sqlite
       .prepare("SELECT id, status FROM boards WHERE id = ?")
       .get(boardId) as BoardRow | undefined;
     if (!board) continue;
@@ -73,7 +75,7 @@ export async function POST(req: NextRequest) {
     const jobId = uuid();
     jobIds.push(jobId);
 
-    sqlite
+    await sqlite
       .prepare(
         "INSERT INTO jobs (id, user_id, board_id, bitstream_path, bitstream_name, status, batch_id) VALUES (?, ?, ?, ?, ?, 'queued', ?)"
       )
@@ -88,15 +90,15 @@ export async function POST(req: NextRequest) {
   }
 
   // Update batch progress in background
-  setTimeout(() => {
-    const done = sqlite
+  setTimeout(async () => {
+    const done = await sqlite
       .prepare(
         "SELECT COUNT(*) as c FROM jobs WHERE batch_id = ? AND status IN ('success','failed')"
       )
       .get(batchId) as CountRow | undefined;
     const completedCount = done?.c ?? 0;
     if (completedCount >= boardIds.length) {
-      sqlite.prepare("UPDATE batch_jobs SET status = 'completed', completed_at = datetime('now') WHERE id = ?").run(batchId);
+      await sqlite.prepare("UPDATE batch_jobs SET status = 'completed', completed_at = datetime('now') WHERE id = ?").run(batchId);
     }
   }, 30000);
 

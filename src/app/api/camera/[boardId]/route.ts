@@ -16,11 +16,10 @@ export async function GET(
 
   const { boardId } = await params;
 
-  const board = db
+  const [board] = await db
     .select()
     .from(boards)
-    .where(eq(boards.id, boardId))
-    .get();
+    .where(eq(boards.id, boardId));
 
   if (!board || !board.cameraDevice) {
     return NextResponse.json({ error: "Camera not available" }, { status: 404 });

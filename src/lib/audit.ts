@@ -13,13 +13,13 @@ interface AuditLogOptions {
 /**
  * Log an event to the security audit trail.
  */
-export function logAuditEvent(options: AuditLogOptions) {
+export async function logAuditEvent(options: AuditLogOptions) {
   const { userId, action, target, metadata = {}, ipAddress, userAgent } = options;
   const id = uuid();
   const metaStr = typeof metadata === "string" ? metadata : JSON.stringify(metadata);
   
   try {
-    sqlite
+    await sqlite
       .prepare(
         "INSERT INTO audit_logs (id, user_id, action, target, ip_address, user_agent, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)"
       )
