@@ -106,10 +106,12 @@ export default function JupyterPage({ params }: { params: Promise<{ boardId: str
 
         if (jupyterRes.ok) {
           setJupyterUrl(jupyterData.url);
-          setOutputs((prev) => [...prev, "Jupyter endpoint resolved."]);
+          setOutputs((prev) => [...prev, `Jupyter isolated workspace resolved (${jupyterData.sanitizedUserId || "session"}).`]);
         } else {
-          setError(jupyterData.error || "Jupyter session could not be started");
-          setOutputs((prev) => [...prev, "Jupyter endpoint unavailable."]);
+          const stageTag = jupyterData.stage ? `[${jupyterData.stage}] ` : "";
+          const errorMsg = `${stageTag}${jupyterData.error || "Jupyter session could not be started"}`;
+          setError(errorMsg);
+          setOutputs((prev) => [...prev, `Diagnostic Failure ${stageTag}: ${jupyterData.error}`]);
         }
       } catch (err: any) {
         setError(err.message);

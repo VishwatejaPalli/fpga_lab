@@ -110,10 +110,10 @@ export default function Navbar() {
           {/* Settings Button */}
           <Link
             href="/settings"
-            className={`flex items-center justify-center w-9 h-9 rounded-full transition-colors ${
+            className={`flex items-center justify-center w-9 h-9 rounded-full transition-all duration-200 ${
               pathname === "/settings" || pathname.startsWith("/settings/")
-                ? "text-muted opacity-50 bg-foreground/10"
-                : "text-muted hover:text-foreground hover:bg-foreground/5"
+                ? "text-blue-400 bg-blue-500/15 border border-blue-500/30 shadow-[0_0_12px_rgba(59,130,246,0.25)]"
+                : "text-slate-400 hover:text-white hover:bg-white/10 border border-transparent"
             }`}
             aria-label="Settings"
           >
@@ -209,10 +209,10 @@ export default function Navbar() {
               <Link
                 href="/settings"
                 onClick={() => setMenuOpen(false)}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors touch-manipulation ${
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all touch-manipulation ${
                   pathname === "/settings" || pathname.startsWith("/settings/")
-                    ? "opacity-50 text-muted bg-white/5"
-                    : "text-muted hover:text-foreground hover:bg-white/5"
+                    ? "bg-blue-500/15 text-blue-400 border border-blue-500/30"
+                    : "text-slate-300 hover:text-white hover:bg-white/5 border border-transparent"
                 }`}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">

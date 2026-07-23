@@ -31,3 +31,9 @@ This document outlines potential high-impact functional improvements that could 
 **Goal:** Drastically reduce bandwidth and latency for the live hardware camera feeds.
 - **Implementation:** Replace the current MJPEG-over-WebSockets approach with WebRTC (Real-Time Communication).
 - **Backend:** Use a lightweight WebRTC server (like Pion or GStreamer) to capture the USB webcam and peer-to-peer stream 60fps video directly to the student's browser with sub-100ms latency.
+
+## 7. Isolated Per-User PYNQ Workspaces
+**Goal:** Prevent shared directory clutter and ensure student project persistence across lab sessions on physical PYNQ boards.
+- **Implementation:** Upon session initialization, the backend SSH service creates an isolated directory per student (e.g. `/home/xilinx/cloudlab/<userId>`) and configures/symlinks the Jupyter root to that directory before proxying traffic.
+- **Benefits:** Complete project isolation, student work persistence across sessions, simplified instructor assignment grading/downloads, and protection against accidental file overwrites in shared directories.
+
