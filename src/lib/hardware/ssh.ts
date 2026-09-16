@@ -1,23 +1,16 @@
 import { EventEmitter } from "events";
-import { eq } from "drizzle-orm";
-import db from "@/lib/db";
-import { boards } from "@/lib/db/schema";
-import { decryptSafe } from "@/lib/auth/crypto";
+import { Client, type ClientChannel } from "ssh2";
 
 /**
  * SSH Service — manages SSH connections to network-attached FPGA boards.
  * Opens SSH sessions and forwards PTY data to WebSocket clients.
- *
- * Note: The 'ssh2' package requires native bindings.
- * This module dynamically imports it so the server can start even if
- * it's not available (e.g., in CI/build environments).
  */
 class SSHService extends EventEmitter {
   private clients = new Map<
     string,
     {
-      client: any;
-      stream: any;
+      client: Client;
+      stream: ClientChannel;
       inputBuffer: string;
     }
   >();
@@ -31,25 +24,21 @@ class SSHService extends EventEmitter {
       return;
     }
 
-    const [board] = await db
-      .select()
-      .from(boards)
-      .where(eq(boards.id, boardId));
-
-    if (!board || !board.ipAddress) {
-      console.warn(`[SSH] IP address not configured for board ${boardId}`);
+    let target;
+    try {
+      const { PynqConnectionManager } = await import("./connection-manager");
+      target = await PynqConnectionManager.resolveTarget(boardId);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[SSH] Target resolution failed for board ${boardId}:`, message);
       return;
     }
 
-    const ipAddress = board.ipAddress;
-    const username = board.sshUsername || "xilinx";
-    const password = decryptSafe(board.sshPassword) || "xilinx";
+    const ipAddress = target.ipAddress;
+    const username = target.sshUsername;
+    const password = target.sshPassword || "xilinx";
 
     try {
-      // Use eval-require to prevent Turbopack from trying to resolve native modules at build time
-      const _require = eval("require") as NodeRequire;
-      const { Client } = _require("ssh2");
-
       const client = new Client();
 
       client.on("error", (err: Error) => {
@@ -66,7 +55,7 @@ class SSHService extends EventEmitter {
       await new Promise<void>((resolve, reject) => {
         client.on("ready", () => {
           console.log(`[SSH] Client ready for ${ipAddress}`);
-          client.shell((err: Error | null, stream: any) => {
+          client.shell((err: Error | undefined, stream: ClientChannel) => {
             if (err) return reject(err);
 
             stream.on("data", (data: Buffer) => {
@@ -106,18 +95,20 @@ class SSHService extends EventEmitter {
     const entry = this.clients.get(boardId);
     if (!entry) return;
 
-    // Advanced buffer accumulation for firewall filtering
+    // Defense-in-depth note: Client-side PTY character inspection cannot guarantee 100%
+    // prevention against advanced shell escaping, aliases, or binary encoding.
+    // Production PYNQ boards should enforce rbash (restricted bash) and strict sudoers.
+    // Dangerous binary/command patterns (including full paths and network shells)
+    const dangerousPattern = /(?:^|[\s;&|`$()<>])(?:\/(?:usr\/)?(?:s?bin)\/)?(sudo|su|reboot|shutdown|poweroff|halt|init|rm|mkfs|dd|chown|chmod|chroot|systemctl|service|wget|curl|nc|ncat|netcat|socat|python[0-9.]* -c|perl -e|ruby -e|bash -i|sh -i)\b/i;
+
     for (const char of data) {
       if (char === '\r' || char === '\n') {
         // Strip out common PTY ANSI escape sequences
         const cleanCmd = entry.inputBuffer
           .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")
           .replace(/\x1b/g, "")
-          .toLowerCase()
           .trim();
 
-        // Check for dangerous commands matching word boundaries
-        const dangerousPattern = /\b(sudo|su|reboot|shutdown|poweroff|rm|mkfs|dd|chown|chmod|chroot|systemctl|wget|curl)\b/;
         if (dangerousPattern.test(cleanCmd)) {
           console.warn(`[SSH] Antigravity Firewall blocked dangerous command on board ${boardId}: ${cleanCmd}`);
           // Send Ctrl+C to cancel the current line on the remote shell

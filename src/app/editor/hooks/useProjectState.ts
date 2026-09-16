@@ -159,12 +159,14 @@ export function useProjectState(files: Record<string, string>) {
       .catch(() => {});
   }, []);
 
-  // Sync active code when active file or files map changes
-  useEffect(() => {
+  // Adjust active code when active file changes
+  const [prevFile, setPrevFile] = useState(activeFile);
+  if (activeFile !== prevFile) {
+    setPrevFile(activeFile);
     if (activeFile && files[activeFile] !== undefined) {
       setActiveCode(files[activeFile]);
     }
-  }, [activeFile, files]);
+  }
 
   const openTab = useCallback(
     (id: string, label: string, type: "file" | "view") => {

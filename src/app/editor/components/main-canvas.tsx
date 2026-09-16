@@ -52,6 +52,7 @@ interface MainCanvasProps {
 
   // Schematic View Props
   schematicSvg: string;
+  placementData?: any;
 }
 
 export default function MainCanvas({
@@ -95,6 +96,7 @@ export default function MainCanvas({
   globalRadix,
   setGlobalRadix,
   schematicSvg,
+  placementData,
 }: MainCanvasProps) {
   return (
     <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#e4ecf6]">
@@ -202,6 +204,7 @@ export default function MainCanvas({
             dspUsage={dspUsage}
             wnsValue={wnsValue}
             handleRunSynthesis={handleRunSynthesis}
+            placementData={placementData}
           />
         )}
       </div>

@@ -4,6 +4,25 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/navbar";
 import ConfirmModal from "@/components/confirm-modal";
+import {
+  CheckCircleSolidIcon,
+  XCircleSolidIcon,
+  BookOpenIcon,
+  PinIcon,
+  EditIcon,
+  TrashIcon,
+  CalendarIcon,
+  UserIcon,
+  RocketIcon,
+  RadioIcon,
+  CopyIcon,
+  KeyIcon,
+  ZapSolidIcon,
+  AlertTriangleIcon,
+  XIcon,
+  ScrollTextIcon,
+  MonitorIcon,
+} from "@/components/icons";
 import { AreaChart, Area, ScatterChart, Scatter, ZAxis, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 type Tab = "analytics" | "telemetry" | "notebooks" | "reservations" | "batch" | "api-keys" | "export";
@@ -139,6 +158,18 @@ export default function ResearcherPage() {
   const [activeLogJobId, setActiveLogJobId] = useState<string | null>(null);
   const [activeLogBoardName, setActiveLogBoardName] = useState("");
   const [activeJobLogs, setActiveJobLogs] = useState<string>("");
+  const [jobNotification, setJobNotification] = useState<{
+    id: string;
+    boardName: string;
+    success: boolean;
+  } | null>(null);
+
+  // Auto-dismiss job completion toast
+  useEffect(() => {
+    if (!jobNotification) return;
+    const t = setTimeout(() => setJobNotification(null), 7000);
+    return () => clearTimeout(t);
+  }, [jobNotification]);
 
   // Flash message
   const [msg, setMsg] = useState({ text: "", ok: true });
@@ -191,6 +222,11 @@ export default function ResearcherPage() {
           setActiveJobLogs((prev) => prev + msg.data);
         } else if (msg.type === "job-complete") {
           setActiveJobLogs((prev) => prev + `\n[System] Programming completed: ${msg.success ? "SUCCESS" : "FAILED"}\n`);
+          setJobNotification({
+            id: activeLogJobId,
+            boardName: activeLogBoardName || "FPGA Board",
+            success: !!msg.success,
+          });
         }
       } catch (err) {
         setActiveJobLogs((prev) => prev + event.data);
@@ -521,22 +557,22 @@ export default function ResearcherPage() {
   ];
 
   return (
-    <div className="min-h-[100dvh]">
+    <div className="min-h-screen pb-16 bg-background bg-grid-cockpit text-foreground transition-colors">
       <Navbar />
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
-          <h1 className="text-2xl sm:text-3xl font-bold">Researcher Tools</h1>
-          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-purple-100 text-purple-700">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">Researcher Tools</h1>
+          <span className="text-xs font-mono font-semibold px-2.5 py-0.5 rounded-full bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/30">
             {user?.role}
           </span>
         </div>
 
         {/* Flash message */}
         {msg.text && (
-          <div className={`mb-4 px-4 py-3 rounded-lg text-sm font-medium ${
-            msg.ok ? "bg-green-50 text-green-800 border border-green-200" : "bg-red-50 text-red-800 border border-red-200"
+          <div className={`mb-4 px-4 py-3 rounded-xl text-xs font-mono font-medium ${
+            msg.ok ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30" : "bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30"
           }`}>
             {msg.text}
           </div>
@@ -548,10 +584,10 @@ export default function ResearcherPage() {
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-medium transition-all touch-manipulation active:scale-95 ${
+              className={`shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-mono font-medium transition-all touch-manipulation active:scale-95 ${
                 tab === t.id
-                  ? "bg-purple-600 text-white shadow-md"
-                  : "bg-white text-gray-600 border border-gray-200 hover:border-purple-300"
+                  ? "bg-purple-600 text-white shadow-lg shadow-purple-600/30"
+                  : "bg-card text-muted border border-border hover:border-purple-500/40 hover:text-foreground"
               }`}
             >
               <span>{t.icon}</span>
@@ -688,18 +724,18 @@ export default function ResearcherPage() {
         {tab === "telemetry" && (
           <div className="space-y-6 animate-fadeIn">
             {/* Board Selector */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+            <div className="cockpit-panel flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl border border-border shadow-sm">
               <div>
-                <h2 className="text-base font-bold text-gray-900">FPGA Health & Telemetry</h2>
-                <p className="text-xs text-gray-500">Real-time health, thermal, and power monitoring</p>
+                <h2 className="text-base font-bold text-foreground">FPGA Health &amp; Telemetry</h2>
+                <p className="text-xs text-muted">Real-time health, thermal, and power monitoring</p>
               </div>
               <div className="flex items-center gap-2">
-                <label htmlFor="telemetry-board-select" className="text-xs font-semibold text-gray-600">Select Board:</label>
+                <label htmlFor="telemetry-board-select" className="text-xs font-mono font-semibold text-muted">Select Board:</label>
                 <select
                   id="telemetry-board-select"
                   value={selectedTelemetryBoard}
                   onChange={(e) => setSelectedTelemetryBoard(e.target.value)}
-                  className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block p-2 px-3 font-medium transition-all cursor-pointer"
+                  className="bg-card border border-border text-foreground text-xs font-mono rounded-xl focus:ring-purple-500 focus:border-purple-500 block p-2 px-3 transition-all cursor-pointer"
                 >
                   {uniqueTelemetryBoards.map((b) => (
                     <option key={b} value={b}>
@@ -863,10 +899,12 @@ export default function ResearcherPage() {
                 className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
                 onClick={(e) => { if (e.target === e.currentTarget) setShowNoteForm(false); }}
               >
-                <div className="bg-white w-full sm:max-w-lg sm:rounded-xl rounded-t-xl max-h-[90vh] overflow-y-auto">
-                  <div className="sticky top-0 bg-white border-b px-4 sm:px-6 py-4 flex items-center justify-between">
-                    <h3 className="font-semibold">{editingNote ? "Edit Note" : "New Experiment Note"}</h3>
-                    <button onClick={() => setShowNoteForm(false)} className="text-muted hover:text-foreground text-xl p-1">✕</button>
+                <div className="bg-card border border-border text-foreground w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+                  <div className="sticky top-0 bg-card border-b border-border px-4 sm:px-6 py-4 flex items-center justify-between">
+                    <h3 className="font-semibold text-foreground">{editingNote ? "Edit Note" : "New Experiment Note"}</h3>
+                    <button onClick={() => setShowNoteForm(false)} className="text-muted hover:text-foreground p-1 rounded">
+                      <XIcon className="w-5 h-5" />
+                    </button>
                   </div>
                   <div className="p-4 sm:p-6 space-y-4">
                     <div>
@@ -912,26 +950,36 @@ export default function ResearcherPage() {
 
             {/* Notes list */}
             {notes.length === 0 ? (
-              <div className="card text-center py-12">
-                <div className="text-4xl mb-2">📓</div>
-                <p className="font-medium">No experiment notes yet</p>
-                <p className="text-sm text-muted mt-1">Create a note to track observations</p>
+              <div className="card text-center py-12 border-dashed border-2 border-border bg-card/40">
+                <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mx-auto mb-3 text-purple-600 dark:text-purple-400">
+                  <BookOpenIcon className="w-6 h-6" />
+                </div>
+                <h4 className="font-semibold text-foreground text-sm">No experiment notes yet</h4>
+                <p className="text-xs text-muted max-w-sm mx-auto mt-1 mb-4">
+                  Log telemetry observations, timing benchmarks, or FPGA test vectors to organize your research.
+                </p>
+                <button
+                  onClick={() => setShowNoteForm(true)}
+                  className="btn-primary text-xs py-1.5 px-3"
+                >
+                  + Create First Note
+                </button>
               </div>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
                 {notes.map((note) => (
                   <div
                     key={note.id}
-                    className={`card transition hover:shadow-md ${note.pinned ? "border-purple-300 ring-1 ring-purple-100" : ""}`}
+                    className={`card transition hover:shadow-md ${note.pinned ? "border-purple-300 dark:border-purple-700/50 ring-1 ring-purple-100 dark:ring-purple-900/20" : ""}`}
                   >
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex items-center gap-2 min-w-0">
-                        {!!note.pinned && <span>📌</span>}
+                        {!!note.pinned && <PinIcon className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />}
                         <h4 className="font-semibold text-sm truncate">{note.title}</h4>
                       </div>
                       <div className="flex items-center gap-1 shrink-0 ml-2">
-                        <button onClick={() => togglePin(note)} className="p-1 text-xs hover:bg-gray-100 rounded" title="Pin">
-                          {note.pinned ? "📌" : "📍"}
+                        <button onClick={() => togglePin(note)} className="p-1 text-xs hover:bg-muted rounded" title="Pin">
+                          <PinIcon className={`w-3.5 h-3.5 ${note.pinned ? "text-purple-600 dark:text-purple-400" : "text-muted"}`} />
                         </button>
                         <button
                           onClick={() => {
@@ -943,13 +991,13 @@ export default function ResearcherPage() {
                             });
                             setShowNoteForm(true);
                           }}
-                          className="p-1 text-xs hover:bg-gray-100 rounded"
+                          className="p-1 text-xs hover:bg-muted rounded text-muted hover:text-foreground"
                           title="Edit"
                         >
-                          ✏️
+                          <EditIcon className="w-3.5 h-3.5" />
                         </button>
-                        <button onClick={() => deleteNote(note.id)} className="p-1 text-xs hover:bg-red-50 rounded text-danger" title="Delete">
-                          🗑
+                        <button onClick={() => deleteNote(note.id)} className="p-1 text-xs hover:bg-red-500/10 rounded text-danger" title="Delete">
+                          <TrashIcon className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
@@ -959,7 +1007,7 @@ export default function ResearcherPage() {
                     <div className="flex items-center justify-between">
                       <div className="flex gap-1 flex-wrap">
                         {note.tags.map((t) => (
-                          <span key={t} className="text-[10px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded">{t}</span>
+                          <span key={t} className="text-[10px] bg-purple-500/10 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 rounded border border-purple-500/20">{t}</span>
                         ))}
                       </div>
                       <span className="text-[10px] text-muted">{new Date(note.updated_at).toLocaleDateString()}</span>
@@ -1035,10 +1083,20 @@ export default function ResearcherPage() {
 
             {/* List */}
             {reservations.length === 0 ? (
-              <div className="card text-center py-12">
-                <div className="text-4xl mb-2">📅</div>
-                <p className="font-medium">No upcoming reservations</p>
-                <p className="text-sm text-muted mt-1">Schedule board time in advance</p>
+              <div className="card text-center py-12 border-dashed border-2 border-border bg-card/40">
+                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto mb-3 text-emerald-500 dark:text-emerald-400">
+                  <CalendarIcon className="w-6 h-6" />
+                </div>
+                <h4 className="font-semibold text-foreground text-sm">No upcoming reservations</h4>
+                <p className="text-xs text-muted max-w-sm mx-auto mt-1 mb-4">
+                  Schedule exclusive hardware lab time in advance to run long synthesis passes or automated test loops.
+                </p>
+                <button
+                  onClick={() => setShowResForm(true)}
+                  className="btn-primary text-xs py-1.5 px-3"
+                >
+                  + Reserve Board Time
+                </button>
               </div>
             ) : (
               <div className="space-y-3">
@@ -1047,16 +1105,29 @@ export default function ResearcherPage() {
                   const end = new Date(r.ends_at);
                   const isNow = start <= new Date() && end >= new Date();
                   return (
-                    <div key={r.id} className={`card flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${isNow ? "border-green-300 ring-1 ring-green-100" : ""}`}>
+                    <div key={r.id} className={`card flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${isNow ? "border-green-300 dark:border-green-700/50 ring-1 ring-green-100 dark:ring-green-900/20" : ""}`}>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-semibold text-sm">{r.board_name}</span>
-                          {isNow && <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">NOW</span>}
+                          {isNow && <span className="text-[10px] bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full font-medium">NOW</span>}
                         </div>
-                        <div className="text-xs text-muted space-x-3">
-                          <span>📅 {start.toLocaleDateString()} {start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} → {end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                          {r.user_name && <span>👤 {r.user_name}</span>}
-                          {r.purpose && <span>📝 {r.purpose}</span>}
+                        <div className="text-xs text-muted flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <span className="flex items-center gap-1">
+                            <CalendarIcon className="w-3.5 h-3.5" />
+                            {start.toLocaleDateString()} {start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} → {end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                          {r.user_name && (
+                            <span className="flex items-center gap-1">
+                              <UserIcon className="w-3.5 h-3.5" />
+                              {r.user_name}
+                            </span>
+                          )}
+                          {r.purpose && (
+                            <span className="flex items-center gap-1">
+                              <EditIcon className="w-3.5 h-3.5" />
+                              {r.purpose}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <button onClick={() => cancelReservation(r.id)} className="btn-danger text-xs shrink-0">
@@ -1114,9 +1185,10 @@ export default function ResearcherPage() {
                 </div>
                 <button
                   onClick={deployBatch}
-                  className="btn-primary w-full py-2.5 transition active:scale-98"
+                  className="btn-primary w-full py-2.5 transition active:scale-98 flex items-center justify-center gap-2"
                 >
-                  🚀 Deploy Batch to {selectedBoards.length} Boards
+                  <RocketIcon className="w-4 h-4" />
+                  Deploy Batch to {selectedBoards.length} Boards
                 </button>
               </div>
 
@@ -1151,12 +1223,12 @@ export default function ResearcherPage() {
                       return (
                         <label
                           key={b.id}
-                          className={`flex items-center gap-3 p-3 rounded-lg border text-sm transition cursor-pointer select-none ${
+                          className={`flex items-center gap-3 p-3 rounded-xl border text-sm transition cursor-pointer select-none ${
                             isOffline
-                              ? "bg-gray-50 border-gray-150 opacity-60 cursor-not-allowed"
+                              ? "bg-muted/20 border-border opacity-50 cursor-not-allowed text-muted"
                               : isSelected
-                              ? "bg-purple-50/60 border-purple-300 ring-1 ring-purple-100"
-                              : "bg-white hover:border-gray-300 border-gray-200"
+                              ? "bg-purple-500/15 border-purple-500/40 text-purple-600 dark:text-purple-300 ring-1 ring-purple-500/20"
+                              : "bg-card hover:border-purple-500/30 border-border text-foreground"
                           }`}
                         >
                           <input
@@ -1204,12 +1276,12 @@ export default function ResearcherPage() {
                   </span>
                   <button
                     onClick={() => setActiveLogJobId(null)}
-                    className="text-gray-400 hover:text-white transition font-bold"
+                    className="text-muted hover:text-foreground transition font-bold flex items-center gap-1 text-xs"
                   >
-                    ✕ Close Feed
+                    <XIcon className="w-4 h-4" /> Close Feed
                   </button>
                 </div>
-                <div className="bg-gray-900 border border-gray-800 rounded p-3 h-64 overflow-y-auto whitespace-pre-wrap leading-relaxed select-text font-mono text-[11px] scrollbar-thin scrollbar-thumb-gray-800">
+                <div className="bg-slate-950 border border-border rounded-xl p-3 h-64 overflow-y-auto whitespace-pre-wrap leading-relaxed select-text font-mono text-[11px] text-slate-200">
                   {activeJobLogs}
                 </div>
               </div>
@@ -1220,10 +1292,14 @@ export default function ResearcherPage() {
               <h3 className="text-base font-bold text-foreground">JTAG Batch Jobs History</h3>
 
               {batches.length === 0 ? (
-                <div className="card text-center py-10">
-                  <div className="text-3xl mb-2">⚡</div>
-                  <p className="font-semibold text-sm">No batch deployments yet</p>
-                  <p className="text-xs text-muted mt-0.5">Use the configuration form above to trigger your first JTAG batch</p>
+                <div className="card text-center py-12 border-dashed border-2 border-border bg-card/40">
+                  <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mx-auto mb-3 text-blue-500 dark:text-blue-400">
+                    <ZapSolidIcon className="w-6 h-6" />
+                  </div>
+                  <h4 className="font-semibold text-foreground text-sm">No batch deployments yet</h4>
+                  <p className="text-xs text-muted max-w-md mx-auto mt-1">
+                    Deploy a bitstream simultaneously across multiple connected FPGA boards using the configuration form above.
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -1238,29 +1314,29 @@ export default function ResearcherPage() {
                       <div
                         key={batch.id}
                         className={`card transition border overflow-hidden p-0 ${
-                          isRunning ? "border-purple-300 shadow-sm" : ""
+                          isRunning ? "border-purple-300 dark:border-purple-700/50 shadow-sm" : ""
                         }`}
                       >
                         {/* Header Details */}
                         <div
                           onClick={() => setExpandedBatch(isExpanded ? null : batch.id)}
-                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 cursor-pointer select-none bg-gray-50/50 hover:bg-gray-50 transition"
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 cursor-pointer select-none bg-muted/20 hover:bg-muted/40 transition"
                         >
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="font-bold text-sm text-foreground">{batch.name}</span>
                               <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
                                 batch.status === "completed"
-                                  ? "bg-green-100 text-green-700"
+                                  ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
                                   : batch.status === "failed"
-                                  ? "bg-red-100 text-red-700"
-                                  : "bg-purple-100 text-purple-700 animate-pulse"
+                                  ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300"
+                                  : "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 animate-pulse"
                               }`}>
                                 {batch.status}
                               </span>
                             </div>
                             <div className="text-[10px] text-muted space-x-3">
-                              <span>📅 Created: {new Date(batch.created_at).toLocaleString()}</span>
+                              <span>Created: {new Date(batch.created_at).toLocaleString()}</span>
                               <span>Target: {total} boards</span>
                               {batch.completed_at && <span>Done: {new Date(batch.completed_at).toLocaleString()}</span>}
                             </div>
@@ -1272,7 +1348,7 @@ export default function ResearcherPage() {
                                 <span>Progress</span>
                                 <span>{percent}% ({done}/{total})</span>
                               </div>
-                              <div className="w-full bg-gray-150 rounded-full h-1.5 overflow-hidden">
+                              <div className="w-full bg-muted/60 rounded-full h-1.5 overflow-hidden">
                                 <div
                                   className={`h-1.5 rounded-full transition-all duration-500 ${
                                     batch.status === "completed"
@@ -1293,14 +1369,14 @@ export default function ResearcherPage() {
 
                         {/* Collapsible Details list of sub-jobs */}
                         {isExpanded && (
-                          <div className="border-t border-border bg-white divide-y divide-gray-100">
+                          <div className="border-t border-border bg-card divide-y divide-border/60">
                             {batch.jobs && batch.jobs.length > 0 ? (
                               batch.jobs.map((job) => (
-                                <div key={job.id} className="flex items-center justify-between p-3.5 pl-6 text-xs transition hover:bg-gray-50/50">
+                                <div key={job.id} className="flex items-center justify-between p-3.5 pl-6 text-xs transition hover:bg-muted/20">
                                   <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-2">
-                                      <span className="font-semibold text-gray-700">{job.board_name}</span>
-                                      <span className="text-[9px] font-mono text-muted">{job.board_id}</span>
+                                      <span className="font-semibold text-foreground font-mono">{job.board_name}</span>
+                                      <span className="text-[10px] font-mono text-muted">{job.board_id}</span>
                                     </div>
                                     {job.completed_at && (
                                       <div className="text-[9px] text-muted mt-0.5">
@@ -1312,10 +1388,10 @@ export default function ResearcherPage() {
                                   <div className="flex items-center gap-3">
                                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
                                       job.status === "success"
-                                        ? "bg-green-50 text-green-700"
+                                        ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
                                         : job.status === "failed" || job.status === "cancelled"
-                                        ? "bg-red-50 text-red-700"
-                                        : "bg-yellow-50 text-yellow-750 animate-pulse"
+                                        ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300"
+                                        : "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 animate-pulse"
                                     }`}>
                                       {job.status}
                                     </span>
@@ -1325,9 +1401,9 @@ export default function ResearcherPage() {
                                           setActiveLogJobId(job.id);
                                           setActiveLogBoardName(job.board_name);
                                         }}
-                                        className="text-[10px] text-purple-600 hover:text-purple-800 font-semibold border border-purple-200 hover:bg-purple-50 px-2 py-1 rounded transition select-none"
+                                        className="text-[10px] text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 font-semibold border border-purple-200 dark:border-purple-800 hover:bg-purple-500/10 px-2 py-1 rounded transition select-none flex items-center gap-1"
                                       >
-                                        📡 Live Logs
+                                        <RadioIcon className="w-3 h-3" /> Live Logs
                                       </button>
                                     )}
                                   </div>
@@ -1354,19 +1430,19 @@ export default function ResearcherPage() {
 
             {/* Revealed key warning */}
             {revealedKey && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-lg">⚠️</span>
-                  <span className="font-semibold text-sm text-yellow-800">Save this key — you won&apos;t see it again</span>
+                  <AlertTriangleIcon className="w-4 h-4 text-amber-500" />
+                  <span className="font-semibold text-sm text-amber-600 dark:text-amber-400 font-mono">Save this key — you won&apos;t see it again</span>
                 </div>
-                <div className="bg-white rounded border px-3 py-2 font-mono text-xs break-all select-all">
+                <div className="bg-card rounded-xl border border-border px-3 py-2 font-mono text-xs text-emerald-600 dark:text-emerald-400 break-all select-all">
                   {revealedKey}
                 </div>
                 <button
                   onClick={() => { navigator.clipboard.writeText(revealedKey); flash("Copied!", true); }}
-                  className="mt-2 text-xs text-primary font-medium hover:underline"
+                  className="mt-2 text-xs text-primary font-mono font-medium hover:underline flex items-center gap-1.5"
                 >
-                  📋 Copy to clipboard
+                  <CopyIcon className="w-3.5 h-3.5" /> Copy to clipboard
                 </button>
               </div>
             )}
@@ -1400,7 +1476,9 @@ export default function ResearcherPage() {
             {/* Key list */}
             {apiKeys.length === 0 ? (
               <div className="card text-center py-12">
-                <div className="text-4xl mb-2">🔑</div>
+                <div className="flex justify-center mb-2">
+                  <KeyIcon className="w-10 h-10 text-muted" />
+                </div>
                 <p className="font-medium">No API keys</p>
                 <p className="text-sm text-muted mt-1">Create a key for programmatic access</p>
               </div>
@@ -1411,7 +1489,7 @@ export default function ResearcherPage() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-sm">{k.name}</span>
-                        <code className="text-xs text-muted bg-gray-100 px-1.5 py-0.5 rounded">{k.prefix}</code>
+                        <code className="text-xs text-muted bg-muted px-1.5 py-0.5 rounded font-mono">{k.prefix}</code>
                       </div>
                       <div className="text-xs text-muted mt-0.5">
                         Created {new Date(k.created_at).toLocaleDateString()}
@@ -1436,21 +1514,21 @@ export default function ResearcherPage() {
 
             <div className="grid gap-4 sm:grid-cols-3">
               <ExportCard
-                icon="📋"
+                icon={<ScrollTextIcon className="w-6 h-6 text-primary" />}
                 title="Job History"
                 desc="All programming jobs with board, status, and timestamps"
                 onCSV={() => downloadExport("jobs", "csv")}
                 onJSON={() => downloadExport("jobs", "json")}
               />
               <ExportCard
-                icon="🖥️"
+                icon={<MonitorIcon className="w-6 h-6 text-primary" />}
                 title="Sessions"
                 desc="Hardware session logs with durations"
                 onCSV={() => downloadExport("sessions", "csv")}
                 onJSON={() => downloadExport("sessions", "json")}
               />
               <ExportCard
-                icon="📓"
+                icon={<BookOpenIcon className="w-6 h-6 text-primary" />}
                 title="Experiment Notes"
                 desc="All notebooks with tags and content"
                 onCSV={() => downloadExport("notes", "csv")}
@@ -1460,6 +1538,39 @@ export default function ResearcherPage() {
           </div>
         )}
       </main>
+
+      {/* Live FPGA Job Completion Notification Toast */}
+      {jobNotification && (
+        <div
+          className={`fixed bottom-6 right-6 z-50 p-4 rounded-xl border shadow-2xl backdrop-blur-md flex items-start gap-3 max-w-sm transition-all animate-in slide-in-from-bottom-5 ${
+            jobNotification.success
+              ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-700 dark:text-emerald-200"
+              : "bg-rose-500/15 border-rose-500/40 text-rose-700 dark:text-rose-200"
+          }`}
+        >
+          <div className="shrink-0 mt-0.5">
+            {jobNotification.success ? (
+              <CheckCircleSolidIcon className="w-5 h-5 text-emerald-500" />
+            ) : (
+              <XCircleSolidIcon className="w-5 h-5 text-rose-500" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h4 className="text-sm font-semibold text-foreground">
+              {jobNotification.success ? "JTAG Programming Succeeded" : "JTAG Programming Failed"}
+            </h4>
+            <p className="text-xs mt-0.5 text-muted">
+              Target board <strong className="font-mono text-foreground">{jobNotification.boardName}</strong> finished programming.
+            </p>
+          </div>
+          <button
+            onClick={() => setJobNotification(null)}
+            className="text-muted hover:text-foreground text-xs p-1 rounded transition-colors"
+          >
+            <XIcon className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       <ConfirmModal
         isOpen={confirmModal.isOpen}
@@ -1485,12 +1596,12 @@ function StatCard({ label, value, color }: { label: string; value: string | numb
 }
 
 function ExportCard({ icon, title, desc, onCSV, onJSON }: {
-  icon: string; title: string; desc: string; onCSV: () => void; onJSON: () => void;
+  icon: React.ReactNode; title: string; desc: string; onCSV: () => void; onJSON: () => void;
 }) {
   return (
     <div className="card flex flex-col">
-      <div className="text-2xl mb-2">{icon}</div>
-      <h3 className="font-semibold text-sm">{title}</h3>
+      <div className="mb-2 text-primary flex items-center">{icon}</div>
+      <h3 className="font-semibold text-sm text-foreground">{title}</h3>
       <p className="text-xs text-muted mt-1 flex-1">{desc}</p>
       <div className="flex gap-2 mt-4">
         <button onClick={onCSV} className="btn-secondary text-xs flex-1">CSV</button>

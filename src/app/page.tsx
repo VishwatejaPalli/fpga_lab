@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ZapSolidIcon, RadioIcon, LockIcon } from "@/components/icons";
 
 export default function HomePage() {
   return (
@@ -37,18 +38,18 @@ export default function HomePage() {
       <main className="flex-1 flex flex-col items-center justify-center px-6 text-center relative z-10 py-20">
         <div className="max-w-4xl mx-auto animate-float">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-foreground/5 border border-border/50 mb-8 backdrop-blur-sm">
-            <span className="flex h-2 w-2 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]"></span>
-            <span className="text-xs font-medium text-slate-300 uppercase tracking-widest">System Online</span>
+            <span className="flex h-2 w-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(74,222,128,0.8)]"></span>
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-300 uppercase tracking-widest">System Online</span>
           </div>
           
           <h1 className="text-5xl md:text-7xl font-extrabold mb-8 leading-tight tracking-tight text-foreground drop-shadow-2xl">
             Program FPGAs
             <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 dark:from-cyan-400 dark:via-blue-500 dark:to-purple-500">
               from anywhere
             </span>
           </h1>
-          <p className="text-lg md:text-xl text-muted mb-12 max-w-2xl mx-auto leading-relaxed">
+          <p className="text-lg md:text-xl text-muted-foreground mb-12 max-w-2xl mx-auto leading-relaxed">
             Upload your bitstream, program real FPGA hardware, and monitor
             outputs — all through your web browser. No lab visit required.
           </p>
@@ -68,25 +69,31 @@ export default function HomePage() {
         {/* Features */}
         <div className="grid md:grid-cols-3 gap-6 mt-32 max-w-5xl w-full">
           <div className="card text-left group">
-            <div className="w-12 h-12 rounded-lg bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-2xl mb-5 shadow-[0_0_15px_rgba(59,130,246,0.3)] group-hover:scale-110 transition-transform duration-300">⚡</div>
+            <div className="w-12 h-12 rounded-lg bg-blue-500/10 dark:bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-600 dark:text-blue-400 mb-5 shadow-[0_0_15px_rgba(59,130,246,0.2)] group-hover:scale-110 transition-transform duration-300">
+              <ZapSolidIcon className="w-6 h-6" />
+            </div>
             <h3 className="text-xl font-semibold mb-3 text-foreground">Remote Programming</h3>
-            <p className="text-slate-400 text-sm leading-relaxed">
+            <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
               Upload bitstreams and program Xilinx, Intel, Lattice, and other
               FPGA boards remotely through highly reliable JTAG servers.
             </p>
           </div>
           <div className="card text-left group">
-            <div className="w-12 h-12 rounded-lg bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-2xl mb-5 shadow-[0_0_15px_rgba(168,85,247,0.3)] group-hover:scale-110 transition-transform duration-300">📡</div>
+            <div className="w-12 h-12 rounded-lg bg-purple-500/10 dark:bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-600 dark:text-purple-400 mb-5 shadow-[0_0_15px_rgba(168,85,247,0.2)] group-hover:scale-110 transition-transform duration-300">
+              <RadioIcon className="w-6 h-6" />
+            </div>
             <h3 className="text-xl font-semibold mb-3 text-foreground">Live Monitoring</h3>
-            <p className="text-slate-400 text-sm leading-relaxed">
+            <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
               Watch FPGA outputs in real time — streaming camera feeds for LEDs, interactive serial
               consoles for UART, and live batch logs.
             </p>
           </div>
           <div className="card text-left group">
-            <div className="w-12 h-12 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-2xl mb-5 shadow-[0_0_15px_rgba(16,185,129,0.3)] group-hover:scale-110 transition-transform duration-300">🔒</div>
+            <div className="w-12 h-12 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-5 shadow-[0_0_15px_rgba(16,185,129,0.2)] group-hover:scale-110 transition-transform duration-300">
+              <LockIcon className="w-6 h-6" />
+            </div>
             <h3 className="text-xl font-semibold mb-3 text-foreground">Session Management</h3>
-            <p className="text-slate-400 text-sm leading-relaxed">
+            <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
               Automatic job queuing, exclusive board reservations, session timeouts, and
               guaranteed FPGA resetting after every use.
             </p>
@@ -96,11 +103,11 @@ export default function HomePage() {
         {/* Supported boards */}
         <div className="mt-24 mb-20 relative z-10 w-full max-w-4xl mx-auto">
           <div className="flex items-center justify-center gap-4 mb-8">
-            <div className="h-px bg-gradient-to-r from-transparent to-white/20 flex-1"></div>
-            <p className="text-slate-400 text-sm uppercase tracking-widest font-semibold">
+            <div className="h-px bg-gradient-to-r from-transparent to-border flex-1"></div>
+            <p className="text-slate-500 dark:text-slate-400 text-sm uppercase tracking-widest font-semibold">
               Supports 200+ Boards
             </p>
-            <div className="h-px bg-gradient-to-l from-transparent to-white/20 flex-1"></div>
+            <div className="h-px bg-gradient-to-l from-transparent to-border flex-1"></div>
           </div>
           
           <div className="flex flex-wrap gap-3 justify-center">

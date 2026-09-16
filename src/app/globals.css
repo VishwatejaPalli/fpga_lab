@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @import "@xterm/xterm/css/xterm.css";
 
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, .dark, .dark *));
 
 :root, [data-theme="dark"] {
   --background: #0b0f19;
@@ -46,8 +46,8 @@
 [data-theme="light"] {
   --background: #f8fafc;
   --foreground: #0f172a;
-  --card: rgba(255, 255, 255, 0.7);
-  --card-hover: rgba(255, 255, 255, 0.9);
+  --card: #ffffff;
+  --card-hover: #f1f5f9;
   --primary: #2563eb;
   --primary-hover: #1d4ed8;
   --primary-light: rgba(37, 99, 235, 0.1);
@@ -57,9 +57,9 @@
   --success: #059669;
   --warning: #d97706;
   --muted: #64748b;
-  --border: rgba(15, 23, 42, 0.1);
-  --input-bg: rgba(255, 255, 255, 0.7);
-  --shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  --border: #e2e8f0;
+  --input-bg: #ffffff;
+  --shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
   --shadow-lg: 0 8px 30px rgba(37, 99, 235, 0.1);
 }
 
@@ -131,11 +131,11 @@ body {
 
 .btn-secondary {
   background: rgba(255, 255, 255, 0.07);
-  color: var(--foreground, #f1f5f9);
+  color: var(--foreground);
   padding: 0.625rem 1.25rem;
   border-radius: 0.5rem;
   font-weight: 600;
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--border);
   backdrop-filter: blur(8px);
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -150,7 +150,18 @@ body {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(59, 130, 246, 0.4);
   box-shadow: 0 0 15px rgba(59, 130, 246, 0.15);
-  color: #ffffff;
+}
+[data-theme="light"] .btn-secondary {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #1e293b;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+[data-theme="light"] .btn-secondary:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
 .btn-secondary:active {
   transform: scale(0.98);
@@ -263,6 +274,150 @@ body {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+.text-gradient-cyan {
+  background: linear-gradient(135deg, #38bdf8, #818cf8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-gradient-emerald {
+  background: linear-gradient(135deg, #34d399, #10b981);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Hardware Engineering Cockpit Instrument Panels */
+.cockpit-panel {
+  background: var(--card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: 0.875rem;
+  box-shadow: var(--shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+[data-theme="dark"] .cockpit-panel {
+  background: rgba(13, 19, 34, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="light"] .cockpit-panel {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+}
+
+.cockpit-panel::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.3), transparent);
+  pointer-events: none;
+}
+
+.instrument-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+[data-theme="dark"] .instrument-card {
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+[data-theme="light"] .instrument-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+}
+
+.instrument-card:hover {
+  border-color: rgba(59, 130, 246, 0.3);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 8px 30px rgba(59, 130, 246, 0.15);
+}
+[data-theme="light"] .instrument-card:hover {
+  border-color: rgba(37, 99, 235, 0.3);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.08);
+}
+
+/* Beacon & Hardware Indicator Glows */
+.led-glow-green {
+  background-color: #10b981;
+  box-shadow: 0 0 10px #10b981, 0 0 20px rgba(16, 185, 129, 0.5);
+}
+
+.led-glow-amber {
+  background-color: #f59e0b;
+  box-shadow: 0 0 10px #f59e0b, 0 0 20px rgba(245, 158, 11, 0.5);
+}
+
+.led-glow-red {
+  background-color: #ef4444;
+  box-shadow: 0 0 10px #ef4444, 0 0 20px rgba(239, 68, 68, 0.5);
+}
+
+.led-glow-cyan {
+  background-color: #06b6d4;
+  box-shadow: 0 0 10px #06b6d4, 0 0 20px rgba(6, 182, 212, 0.5);
+}
+
+/* Background grid pattern */
+.bg-grid-cockpit {
+  background-size: 32px 32px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+}
+[data-theme="light"] .bg-grid-cockpit {
+  background-image: 
+    linear-gradient(to right, rgba(0, 0, 0, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
+}
+
+/* Cockpit Data Table */
+.cockpit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+.cockpit-table th {
+  background: rgba(15, 23, 42, 0.8);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  font-size: 0.6875rem;
+  letter-spacing: 0.05em;
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+[data-theme="light"] .cockpit-table th {
+  background: #f1f5f9;
+  color: #475569;
+  border-bottom: 1px solid #e2e8f0;
+}
+.cockpit-table td {
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 0.15s ease;
+}
+[data-theme="light"] .cockpit-table td {
+  border-bottom: 1px solid #f1f5f9;
+}
+.cockpit-table tr:hover td {
+  background: rgba(255, 255, 255, 0.03);
+}
+[data-theme="light"] .cockpit-table tr:hover td {
+  background: rgba(0, 0, 0, 0.02);
 }
 
 /* Animations */

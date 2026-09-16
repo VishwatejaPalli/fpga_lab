@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/navbar";
+import { ScrollTextIcon, MonitorIcon } from "@/components/icons";
 
 interface JobRecord {
   id: string;
@@ -121,7 +122,9 @@ export default function HistoryPage() {
           /* Jobs list */
           jobs.length === 0 ? (
             <div className="text-center py-16">
-              <div className="text-5xl mb-4">📋</div>
+              <div className="w-16 h-16 rounded-2xl bg-muted/30 border border-border flex items-center justify-center mx-auto mb-4 text-muted">
+                <ScrollTextIcon className="w-8 h-8" />
+              </div>
               <h2 className="text-lg font-semibold mb-1">No jobs yet</h2>
               <p className="text-muted text-sm">
                 Program a bitstream to see your job history here.
@@ -175,7 +178,9 @@ export default function HistoryPage() {
         ) : /* Sessions list */
         sessions.length === 0 ? (
           <div className="text-center py-16">
-            <div className="text-5xl mb-4">🖥️</div>
+            <div className="w-16 h-16 rounded-2xl bg-muted/30 border border-border flex items-center justify-center mx-auto mb-4 text-muted">
+              <MonitorIcon className="w-8 h-8" />
+            </div>
             <h2 className="text-lg font-semibold mb-1">No sessions yet</h2>
             <p className="text-muted text-sm">
               Start a hardware session to see your session history here.

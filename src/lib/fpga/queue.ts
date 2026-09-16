@@ -126,12 +126,23 @@ class JobQueue extends EventEmitter {
           programmer.emit("log", `\n[Queue] Retrying programming (attempt ${attempt}/${maxAttempts})...\n`);
         }
         
+        let activeIp = board.ipAddress;
+        if (board.connectionType === "network") {
+          try {
+            const { PynqConnectionManager } = await import("../hardware/connection-manager");
+            const target = await PynqConnectionManager.resolveTarget(board.id);
+            activeIp = target.ipAddress;
+          } catch (err: any) {
+            console.warn(`[Queue] Failed to resolve target IP for board ${board.id}:`, err.message);
+          }
+        }
+
         result = await programmer.program({
           boardType: board.boardType,
           bitstreamPath: job.bitstreamPath,
           programmingTool: board.programmingTool || "openFPGALoader",
           devicePath: board.devicePath,
-          ipAddress: board.ipAddress,
+          ipAddress: activeIp,
           sshUsername: board.sshUsername,
           sshPassword: board.sshPassword,
           timeout: 120000,
@@ -143,21 +154,47 @@ class JobQueue extends EventEmitter {
 
         attempt++;
         if (attempt <= maxAttempts) {
-          // Wait 2 seconds before retrying to let the JTAG connection/USB controller settle
-          await new Promise((resolve) => setTimeout(resolve, 2000));
+          // Wait 1 second before retrying to let the JTAG connection/USB controller settle
+          await new Promise((resolve) => setTimeout(resolve, 1000));
         }
       }
 
       if (result.success) {
-        // Create hardware session
         const sessionTimeout = board.sessionTimeoutMinutes || 30;
-        const expiresAt = new Date(
-          Date.now() + sessionTimeout * 60 * 1000
-        ).toISOString();
-        const sessionId = uuid();
+        const expiresAt = new Date(Date.now() + sessionTimeout * 60 * 1000).toISOString();
 
-        await db.insert(hwSessions)
-          .values({
+        // Check if there is already an active session for this user on this board (reprogramming)
+        const [existingUserSession] = await db
+          .select()
+          .from(hwSessions)
+          .where(
+            and(
+              eq(hwSessions.boardId, board.id),
+              eq(hwSessions.userId, job.userId),
+              eq(hwSessions.status, "active")
+            )
+          );
+
+        let sessionId: string;
+        if (existingUserSession) {
+          // Reprogramming: reuse and extend existing session
+          sessionId = existingUserSession.id;
+          await db
+            .update(hwSessions)
+            .set({
+              jobId: job.id,
+              expiresAt,
+            })
+            .where(eq(hwSessions.id, sessionId));
+        } else {
+          // Clean up any stale active session before creating a new one
+          await db
+            .update(hwSessions)
+            .set({ status: "ended" })
+            .where(and(eq(hwSessions.boardId, board.id), eq(hwSessions.status, "active")));
+
+          sessionId = uuid();
+          await db.insert(hwSessions).values({
             id: sessionId,
             userId: job.userId,
             boardId: board.id,
@@ -165,6 +202,7 @@ class JobQueue extends EventEmitter {
             expiresAt,
             status: "active",
           });
+        }
 
         // Update board with session
         await db.update(boards)
@@ -230,9 +268,21 @@ class JobQueue extends EventEmitter {
         })
         .where(eq(jobs.id, job.id));
 
-      await db.update(boards)
-        .set({ status: "free" })
-        .where(eq(boards.id, board.id));
+      // Check if there was an active session to preserve rather than destroying it
+      const [activeSession] = await db
+        .select()
+        .from(hwSessions)
+        .where(and(eq(hwSessions.boardId, board.id), eq(hwSessions.status, "active")));
+
+      if (activeSession) {
+        await db.update(boards)
+          .set({ status: "allocated", currentSessionId: activeSession.id })
+          .where(eq(boards.id, board.id));
+      } else {
+        await db.update(boards)
+          .set({ status: "free", currentSessionId: null })
+          .where(eq(boards.id, board.id));
+      }
     } finally {
       this.boardLocks.set(job.boardId, false);
       this.activeProgrammers.delete(board.id);

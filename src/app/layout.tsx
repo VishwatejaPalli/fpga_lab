@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { initializeServer } from "@/lib/init";
 import { ThemeProvider } from "@/components/theme-provider";
+import { NgrokHeader } from "@/components/ngrok-header";
 
 // Initialize backend services on server start
 if (typeof window === "undefined") {
@@ -11,6 +12,15 @@ if (typeof window === "undefined") {
 export const metadata: Metadata = {
   title: "FPGA Remote Lab",
   description: "Cloud-based FPGA programming and monitoring platform",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -39,6 +49,7 @@ export default function RootLayout({
       <body
         className="antialiased"
       >
+        <NgrokHeader />
         <ThemeProvider>
           {children}
         </ThemeProvider>
@@ -46,3 +57,6 @@ export default function RootLayout({
     </html>
   );
 }
+
+
+

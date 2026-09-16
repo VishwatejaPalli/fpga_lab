@@ -30,10 +30,13 @@ services:
     volumes:
       - ./uploads:/app/uploads
       # Give container hardware access to JTAG/UART/Video (adjust paths if required)
+      # For production least-privilege, avoid 'privileged: true' and mount specific device nodes
       - /dev:/dev
     devices:
       - "/dev/bus/usb:/dev/bus/usb"
-    privileged: true # Required for direct JTAG device mapping and openFPGALoader
+    # Privileged flag is needed only when openFPGALoader cannot access libusb dynamically.
+    # Set to false and use cap_add: [SYS_RAWIO] if running in restricted environments.
+    privileged: true
     restart: unless-stopped
 
   synthesis_worker:

@@ -3,11 +3,25 @@
 import { useEffect, useState, use } from "react";
 import Navbar from "@/components/navbar";
 import { useRouter } from "next/navigation";
+import {
+  RefreshCwIcon,
+  TerminalIcon,
+  ZapIcon,
+  RocketIcon,
+  CpuIcon,
+  SlidersIcon,
+  GlobeIcon,
+  ScrollTextIcon,
+  SparklesIcon,
+} from "@/components/icons";
 
 interface Board {
   id: string;
   name: string;
   boardType: string;
+  status: "free" | "busy" | "offline" | "allocated" | "programming";
+  ipAddress?: string;
+  currentSessionId?: string;
 }
 
 interface HWSession {
@@ -69,26 +83,53 @@ export default function JupyterPage({ params }: { params: Promise<{ boardId: str
   const [autoOpened, setAutoOpened] = useState(false);
   const [telemetry, setTelemetry] = useState<Telemetry | null>(null);
   const [isEndingSession, setIsEndingSession] = useState(false);
+  const [pynqStatus, setPynqStatus] = useState<"online" | "degraded" | "offline" | "unknown">("unknown");
 
+  // Poll PYNQ telemetry + live hardware connectivity status
   useEffect(() => {
-    if (!safeBoardId || error) return;
+    if (!safeBoardId) return;
 
     async function fetchTelemetry() {
       try {
         const res = await fetch(`/api/pynq/${safeBoardId}`);
+        const data = await res.json();
         if (res.ok) {
-          const data = await res.json();
           setTelemetry(data.telemetry);
+          setPynqStatus(data.status || "online");
+        } else {
+          setPynqStatus(data.status || "offline");
+          setTelemetry(null);
         }
       } catch (err) {
         console.error("Failed to fetch PYNQ telemetry:", err);
+        setPynqStatus("offline");
       }
     }
 
     fetchTelemetry();
     const interval = setInterval(fetchTelemetry, 3000);
     return () => clearInterval(interval);
-  }, [safeBoardId, error]);
+  }, [safeBoardId]);
+
+  // Poll board DB status for real-time updates
+  useEffect(() => {
+    if (!safeBoardId) return;
+
+    async function fetchBoard() {
+      try {
+        const res = await fetch(`/api/boards/${safeBoardId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setBoard(data.board);
+        }
+      } catch (err) {
+        console.error("Failed to poll board:", err);
+      }
+    }
+
+    const interval = setInterval(fetchBoard, 5000);
+    return () => clearInterval(interval);
+  }, [safeBoardId]);
 
   useEffect(() => {
     if (!safeBoardId) return;
@@ -192,63 +233,97 @@ export default function JupyterPage({ params }: { params: Promise<{ boardId: str
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen pb-16 bg-background bg-grid-cockpit text-foreground transition-colors">
       <Navbar />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
-          <div>
-            <div className="text-xs text-muted uppercase tracking-wider">Advanced SoC Lab</div>
-            <h1 className="text-2xl sm:text-3xl font-bold">
-              {board?.name || "PYNQ Board"}
-            </h1>
-            <p className="text-sm text-muted font-mono mt-1">
-              Jupyter session for {board?.boardType || "pynq"} • Board ID {safeBoardId ? safeBoardId.slice(0, 8) : "--"}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-4 sm:gap-6">
-            {session && (
-              <div className="bg-background/50 rounded-xl px-4 py-2 border border-border/50 backdrop-blur-sm shadow-inner">
-                <div className="text-[10px] uppercase tracking-wider text-muted font-bold mb-1">Session Expires In</div>
-                <div className={`text-xl font-mono font-bold tracking-tight ${
-                    timeRemaining === "Expired"
-                      ? "text-danger"
-                      : timeRemaining && parseInt(timeRemaining) < 5
-                        ? "text-warning animate-pulse"
-                        : "text-success"
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+        {/* Cockpit HUD Header */}
+        <div className="cockpit-panel p-6 rounded-2xl border border-purple-500/25 bg-purple-50/40 dark:bg-gradient-to-r dark:from-purple-950/30 dark:via-[#0e1422] dark:to-slate-900/40 mb-8 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-80 h-80 bg-purple-500/5 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <span
+                  className={`w-3 h-3 rounded-full ${
+                    pynqStatus === "online"
+                      ? "led-glow-green"
+                      : pynqStatus === "degraded"
+                      ? "led-glow-amber"
+                      : "led-glow-red"
                   }`}
-                >
-                  {timeRemaining || "..."}
-                </div>
+                />
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+                  {board?.name || "PYNQ-Z2 SoC Lab"}
+                </h1>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/30 font-bold">
+                  ZYNQ-7000 ARM+PL
+                </span>
               </div>
-            )}
-            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap text-xs font-mono text-muted">
+                <span className="text-cyan-600 dark:text-cyan-400 font-semibold">Dual Cortex-A9 (667MHz)</span>
+                <span className="opacity-40">•</span>
+                <span className="text-foreground/80">Artix-7 FPGA Logic</span>
+                {board?.ipAddress && (
+                  <>
+                    <span className="opacity-40">•</span>
+                    <span className="text-muted">{board.ipAddress}</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              {session && (
+                <div className="bg-card rounded-xl px-4 py-2 border border-border flex items-center gap-3 shadow-sm font-mono">
+                  <div>
+                    <div className="text-[9px] uppercase tracking-wider text-muted font-bold">Session Remaining</div>
+                    <div
+                      className={`text-sm font-bold tracking-tight ${
+                        timeRemaining === "Expired"
+                          ? "text-rose-500 dark:text-rose-400"
+                          : timeRemaining && parseInt(timeRemaining) < 5
+                          ? "text-amber-500 dark:text-amber-400 animate-pulse"
+                          : "text-emerald-600 dark:text-emerald-400"
+                      }`}
+                    >
+                      {timeRemaining || "..."}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <button
                 onClick={() => window.location.reload()}
-                className="btn-secondary text-sm"
+                className="px-3.5 py-2 text-xs font-mono font-medium rounded-xl bg-card text-foreground border border-border hover:bg-muted transition-all flex items-center gap-2 shadow-sm"
+                title="Reset Connection"
               >
-                Reset Connection
+                <RefreshCwIcon className="w-3.5 h-3.5" />
+                <span>Reconnect</span>
               </button>
+
               <button
                 onClick={() => router.push(`/monitor/${safeBoardId}`)}
-                className="btn-primary flex items-center gap-2 text-sm"
+                className="px-3.5 py-2 text-xs font-mono font-medium rounded-xl bg-blue-600/15 text-blue-600 dark:text-blue-300 border border-blue-500/30 hover:bg-blue-600/25 transition-all flex items-center gap-2 shadow-sm"
               >
-                <span>📟</span> Monitor
+                <TerminalIcon className="w-3.5 h-3.5" />
+                <span>Lab Bench</span>
               </button>
+
               <button
                 onClick={handleEndSession}
                 disabled={isEndingSession}
-                className="relative inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white transition-all duration-300 bg-red-600 rounded-lg shadow-lg hover:bg-red-500 hover:shadow-red-500/30 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed group"
+                className="px-4 py-2 text-xs font-mono font-medium text-white transition-all duration-200 bg-rose-600 hover:bg-rose-500 rounded-xl shadow-lg shadow-rose-600/25 flex items-center gap-2 active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
               >
                 {isEndingSession ? (
                   <>
-                    <svg className="w-4 h-4 animate-spin text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     <span>Ending...</span>
                   </>
                 ) : (
                   <>
-                    <span className="flex items-center justify-center w-5 h-5 bg-white/20 rounded group-hover:bg-white/30 transition-colors">⏹</span>
-                    <span>End Session</span>
+                    <span>⏹</span>
+                    <span>Release SoC</span>
                   </>
                 )}
               </button>
@@ -256,197 +331,216 @@ export default function JupyterPage({ params }: { params: Promise<{ boardId: str
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-6">
-          <div className="space-y-4">
-            <div className="card">
-              <h2 className="font-semibold mb-3">Session Status</h2>
-              <div className="text-sm space-y-2">
+        {/* Workspace Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
+          {/* Left Rack: Status & Launchers */}
+          <div className="space-y-6">
+            {/* Session Health Panel */}
+            <div className="cockpit-panel p-5 rounded-2xl border border-border">
+              <h2 className="font-semibold text-foreground text-sm mb-4 pb-2 border-b border-border flex items-center gap-2">
+                <ZapIcon className="w-4 h-4 text-amber-500" />
+                <span>SoC Hardware Status</span>
+              </h2>
+
+              <div className="text-xs font-mono space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-muted">Hardware</span>
-                  <span className="text-success font-medium">Online</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted">Jupyter</span>
-                  <span className={`font-medium ${error ? "text-danger" : loading ? "text-warning" : "text-success"}`}>
-                    {error ? "Offline" : loading ? "Connecting" : "Active"}
+                  <span className="text-muted">PYNQ Gateway</span>
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        pynqStatus === "online"
+                          ? "led-glow-green"
+                          : pynqStatus === "degraded"
+                          ? "led-glow-amber"
+                          : "led-glow-red"
+                      }`}
+                    />
+                    <span className={pynqStatus === "online" ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}>
+                      {pynqStatus.toUpperCase()}
+                    </span>
                   </span>
                 </div>
+
                 <div className="flex items-center justify-between">
-                  <span className="text-muted">Session Ends</span>
-                  <span className={`font-medium ${timeRemaining === "Expired" ? "text-danger" : "text-foreground"}`}>
-                    {timeRemaining || "--"}
+                  <span className="text-muted">Jupyter Lab</span>
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        error ? "led-glow-red" : loading ? "led-glow-amber" : "led-glow-green"
+                      }`}
+                    />
+                    <span className={error ? "text-rose-500 dark:text-rose-400" : loading ? "text-amber-500 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}>
+                      {error ? "FAILED" : loading ? "PROVISIONING" : "RUNNING"}
+                    </span>
                   </span>
                 </div>
+
                 <div className="flex items-center justify-between">
-                  <span className="text-muted">Endpoint</span>
-                  <span className="text-xs font-mono">{jupyterUrl || "--"}</span>
+                  <span className="text-muted">IP Binding</span>
+                  <span className="text-cyan-600 dark:text-cyan-400 font-semibold">{board?.ipAddress || "192.168.2.99"}</span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-muted">Board Lease</span>
+                  <span className="text-foreground uppercase">{board?.status || "BUSY"}</span>
                 </div>
               </div>
             </div>
 
-            <div className="card">
-              <h2 className="font-semibold mb-3">Quick Tips</h2>
-              <ul className="text-xs text-muted space-y-2">
-                <li>Use Jupyter to run Python notebooks on the Z2 SoC.</li>
-                <li>Overlays control the programmable logic side.</li>
-                <li>Reset Connection if the notebook feels stale.</li>
-              </ul>
-            </div>
+            {/* Jupyter Gateway Access Card */}
+            <div className="cockpit-panel p-5 rounded-2xl border border-border">
+              <h2 className="font-semibold text-foreground text-sm mb-3 flex items-center gap-2">
+                <SparklesIcon className="w-4 h-4 text-purple-400" /> JupyterLab Environment
+              </h2>
+              <p className="text-xs text-muted mb-3">
+                Interactive Python kernel running directly on the ARM Cortex-A9 processor.
+              </p>
 
-            <div className="card">
-              <h2 className="font-semibold mb-3">Jupyter URL</h2>
-              <div className="text-xs font-mono bg-background border border-border rounded-lg px-3 py-2 break-all">
-                {jupyterUrl || "Waiting for URL..."}
+              <div className="text-[11px] font-mono bg-muted/40 border border-border rounded-xl p-3 text-foreground break-all mb-4">
+                {jupyterUrl || "Resolving isolated session URL..."}
               </div>
-              <div className="flex items-center gap-2 mt-3">
+
+              <div className="flex flex-col gap-2">
                 <button
                   onClick={() => jupyterUrl && window.open(jupyterUrl, "_blank", "noopener,noreferrer")}
-                  className="btn-primary text-xs"
+                  className="w-full py-2.5 px-4 rounded-xl font-mono text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white transition-all shadow-lg shadow-purple-600/25 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   disabled={!jupyterUrl}
                 >
-                  Open Jupyter
+                  <RocketIcon className="w-4 h-4" />
+                  <span>Launch JupyterLab Workspace</span>
                 </button>
                 <button
                   onClick={() => setAutoOpened(false)}
-                  className="btn-secondary text-xs"
+                  className="w-full py-2 px-3 rounded-xl font-mono text-xs text-muted hover:text-foreground bg-card hover:bg-muted border border-border transition-all"
                 >
-                  Re-open automatically
+                  Trigger Pop-up Launch Again
                 </button>
               </div>
             </div>
           </div>
 
-          <div className="card p-4 min-h-[520px]">
-            {loading ? (
-              <div className="flex h-full flex-col items-center justify-center">
-                <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mb-3"></div>
-                <p className="text-muted">Connecting to board hardware...</p>
-              </div>
-            ) : error ? (
-              <div className="flex h-full items-center justify-center p-6">
-                <div className="max-w-md w-full bg-card border border-danger/20 rounded-xl p-8 text-center">
-                  <div className="w-14 h-14 bg-danger/10 text-danger rounded-full flex items-center justify-center mx-auto mb-4">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m18 6-12 12"/><path d="m6 6 12 12"/></svg>
-                  </div>
-                  <h2 className="text-lg font-semibold mb-2">Connection Failed</h2>
-                  <p className="text-sm text-muted mb-6">{error}</p>
-                  <div className="space-y-3">
-                    <button onClick={() => window.location.reload()} className="btn-primary w-full">Try Again</button>
-                    <button onClick={() => router.push("/dashboard")} className="btn-secondary w-full">Return to Dashboard</button>
-                  </div>
+          {/* Right Area: Telemetry Dashboard & Diagnostic Feed */}
+          <div className="space-y-6">
+            {/* Live SoC Telemetry Gauges HUD */}
+            {telemetry && (
+              <div className="cockpit-panel p-6 rounded-2xl border border-border">
+                <div className="flex items-center justify-between mb-4 pb-3 border-b border-border">
+                  <h2 className="font-semibold text-foreground text-sm flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full led-glow-green" />
+                    <span>Real-Time ZYNQ SoC Hardware Telemetry</span>
+                  </h2>
+                  <span className="text-[10px] font-mono text-muted">POLL: 3000ms</span>
                 </div>
-              </div>
-            ) : (
-              <div className="flex h-full flex-col gap-6">
-                {/* Real-time Telemetry Dashboard */}
-                {telemetry && (
-                  <div>
-                    <h2 className="font-semibold mb-3 flex items-center gap-1.5 text-sm">
-                      <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                      Live PYNQ Board Telemetry
-                    </h2>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {/* CPU Stats */}
-                      <div className="bg-background border border-border rounded-xl p-4 shadow-sm flex flex-col justify-between">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[10px] font-bold text-muted uppercase tracking-wider">CPU Stats</span>
-                          <span className="text-sm">💻</span>
-                        </div>
-                        <div>
-                          <div className="text-lg font-bold text-foreground">{telemetry.cpu.freq}</div>
-                          <div className="text-[10px] text-muted mt-0.5">Load: {telemetry.cpu.load.join(", ")}</div>
-                        </div>
-                        <div className="mt-3 flex items-center justify-between">
-                          <span className="text-[10px] text-muted">Temp:</span>
-                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                            parseFloat(telemetry.cpu.temp) > 48 
-                              ? "bg-red-100 text-red-700" 
-                              : "bg-green-100 text-green-700"
-                          }`}>
-                            {telemetry.cpu.temp}
-                          </span>
-                        </div>
-                      </div>
 
-                      {/* Memory Stats */}
-                      <div className="bg-background border border-border rounded-xl p-4 shadow-sm flex flex-col justify-between">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Memory</span>
-                          <span className="text-sm">🧠</span>
-                        </div>
-                        <div>
-                          <div className="text-lg font-bold text-foreground">{telemetry.memory.percent}</div>
-                          <div className="text-[10px] text-muted mt-0.5">{telemetry.memory.used} / {telemetry.memory.total}</div>
-                        </div>
-                        <div className="mt-3">
-                          <div className="w-full bg-gray-100 rounded-full h-1 overflow-hidden">
-                            <div 
-                              className="bg-purple-500 h-1 rounded-full transition-all duration-500" 
-                              style={{ width: telemetry.memory.percent }}
-                            />
-                          </div>
-                        </div>
-                      </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {/* CPU Frequency & Temp */}
+                  <div className="bg-muted/30 border border-border rounded-xl p-4 flex flex-col justify-between shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-mono font-bold text-muted uppercase">ARM Cortex-A9</span>
+                      <CpuIcon className="w-4 h-4 text-primary" />
+                    </div>
+                    <div>
+                      <div className="text-xl font-bold font-mono text-foreground">{telemetry.cpu.freq}</div>
+                      <div className="text-[10px] font-mono text-muted mt-0.5">Load: {telemetry.cpu.load.join(", ")}</div>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between text-xs font-mono">
+                      <span className="text-muted">Temp:</span>
+                      <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                        parseFloat(telemetry.cpu.temp) > 55
+                          ? "bg-rose-500/20 text-rose-500 dark:text-rose-400 border border-rose-500/30"
+                          : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                      }`}>
+                        {telemetry.cpu.temp}
+                      </span>
+                    </div>
+                  </div>
 
-                      {/* FPGA Overlay */}
-                      <div className="bg-background border border-border rounded-xl p-4 shadow-sm flex flex-col justify-between">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[10px] font-bold text-muted uppercase tracking-wider">FPGA Overlay</span>
-                          <span className="text-sm">⚡</span>
-                        </div>
-                        <div>
-                          <div className="text-xs font-mono font-bold text-foreground truncate bg-gray-50 border px-1 rounded mt-0.5">{telemetry.fpga.overlay}</div>
-                          <div className="text-[10px] text-muted mt-0.5">Clock: {telemetry.fpga.clock}</div>
-                        </div>
-                        <div className="mt-3 flex items-center justify-between">
-                          <span className="text-[10px] text-muted">Power:</span>
-                          <span className="text-[10px] font-bold text-amber-600">{telemetry.fpga.vccint}</span>
-                        </div>
-                      </div>
-
-                      {/* Network */}
-                      <div className="bg-background border border-border rounded-xl p-4 shadow-sm flex flex-col justify-between">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[10px] font-bold text-muted uppercase tracking-wider">System Net</span>
-                          <span className="text-sm">🌐</span>
-                        </div>
-                        <div>
-                          <div className="text-xs font-mono font-bold text-foreground">{telemetry.network.ip}</div>
-                          <div className="text-[10px] text-muted mt-0.5">Uptime: {telemetry.network.uptime}</div>
-                        </div>
-                        <div className="mt-3 flex items-center justify-between">
-                          <span className="text-[10px] text-muted">Status:</span>
-                          <span className="text-[10px] text-green-600 font-semibold flex items-center gap-0.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                            online
-                          </span>
-                        </div>
+                  {/* DDR3 Memory */}
+                  <div className="bg-muted/30 border border-border rounded-xl p-4 flex flex-col justify-between shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-mono font-bold text-muted uppercase">DDR3 Memory</span>
+                      <SlidersIcon className="w-4 h-4 text-purple-500" />
+                    </div>
+                    <div>
+                      <div className="text-xl font-bold font-mono text-foreground">{telemetry.memory.percent}</div>
+                      <div className="text-[10px] font-mono text-muted mt-0.5">{telemetry.memory.used} / {telemetry.memory.total}</div>
+                    </div>
+                    <div className="mt-3">
+                      <div className="w-full bg-muted/40 rounded-full h-1.5 overflow-hidden border border-border">
+                        <div
+                          className="bg-gradient-to-r from-purple-500 to-indigo-500 h-1.5 rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]"
+                          style={{ width: telemetry.memory.percent }}
+                        />
                       </div>
                     </div>
                   </div>
-                )}
 
-                {/* Outputs section */}
-                <div className="flex-1 flex flex-col min-h-[240px]">
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="font-semibold text-sm">Outputs</h2>
-                    <span className="text-[10px] text-muted">System feed</span>
+                  {/* FPGA PL Overlay */}
+                  <div className="bg-muted/30 border border-border rounded-xl p-4 flex flex-col justify-between shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-mono font-bold text-muted uppercase">PL Bitstream Overlay</span>
+                      <ZapIcon className="w-4 h-4 text-amber-500" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-mono font-bold text-cyan-600 dark:text-cyan-400 truncate bg-card border border-border px-2 py-1 rounded">
+                        {telemetry.fpga.overlay || "base.bit"}
+                      </div>
+                      <div className="text-[10px] font-mono text-muted mt-1">Clock: {telemetry.fpga.clock}</div>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between text-xs font-mono">
+                      <span className="text-muted">VCCINT:</span>
+                      <span className="font-bold text-amber-600 dark:text-amber-400">{telemetry.fpga.vccint}</span>
+                    </div>
                   </div>
-                  <div className="flex-1 bg-background border border-border rounded-lg p-3 font-mono text-xs overflow-y-auto max-h-[300px]">
-                    {outputs.length === 0 ? (
-                      <div className="text-muted">No output yet.</div>
-                    ) : (
-                      outputs.map((line, idx) => (
-                        <div key={idx} className="whitespace-pre-wrap leading-relaxed">{line}</div>
-                      ))
-                    )}
+
+                  {/* System Network */}
+                  <div className="bg-muted/30 border border-border rounded-xl p-4 flex flex-col justify-between shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-mono font-bold text-muted uppercase">Ethernet Link</span>
+                      <GlobeIcon className="w-4 h-4 text-emerald-500" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-mono font-bold text-foreground">{telemetry.network.ip}</div>
+                      <div className="text-[10px] font-mono text-muted mt-1">Uptime: {telemetry.network.uptime}</div>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between text-xs font-mono">
+                      <span className="text-muted">Link:</span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 led-glow-green" />
+                        1Gbps
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
             )}
+
+            {/* Diagnostic Logs / Output Stream */}
+            <div className="cockpit-panel p-5 rounded-2xl border border-border">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-semibold text-foreground text-sm flex items-center gap-2">
+                  <ScrollTextIcon className="w-4 h-4 text-primary" />
+                  <span>Provisioning &amp; Gateway Output Stream</span>
+                </h2>
+                <span className="text-[10px] font-mono text-muted">STDOUT LOGS</span>
+              </div>
+
+              <div className="bg-slate-950 border border-border rounded-xl p-4 font-mono text-xs text-emerald-400 max-h-[320px] overflow-y-auto shadow-inner">
+                {outputs.length === 0 ? (
+                  <div className="text-muted">Awaiting kernel provisioning stream...</div>
+                ) : (
+                  outputs.map((line, idx) => (
+                    <div key={idx} className="whitespace-pre-wrap leading-relaxed">
+                      {line}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </main>
     </div>
   );
 }
+

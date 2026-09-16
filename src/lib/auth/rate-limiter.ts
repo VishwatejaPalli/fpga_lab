@@ -15,14 +15,14 @@ export async function checkRateLimit(options: RateLimitOptions): Promise<{ allow
   
   try {
     // Clean up expired records
-    await sqlite.prepare("DELETE FROM login_attempts WHERE datetime(reset_at) < datetime('now')").run();
+    await sqlite.prepare("DELETE FROM login_attempts WHERE reset_at::timestamptz < NOW()").run();
   } catch (err) {
     console.error("[RateLimit] Clean error:", err);
   }
   
   try {
     // Find attempt record by email and IP
-    let record = await sqlite
+    const record = await sqlite
       .prepare("SELECT id, count, reset_at FROM login_attempts WHERE email = ? AND ip_address = ?")
       .get(email, ipAddress) as { id: string; count: number; reset_at: string } | undefined;
       

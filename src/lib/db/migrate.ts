@@ -49,6 +49,8 @@ export async function runMigrations() {
       CREATE TABLE IF NOT EXISTS boards (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
+        mac_address TEXT,
+        hostname TEXT,
         fpga_family TEXT NOT NULL,
         board_type TEXT NOT NULL,
         connection_type TEXT NOT NULL DEFAULT 'jtag',
@@ -62,6 +64,11 @@ export async function runMigrations() {
         ssh_username TEXT,
         ssh_password TEXT,
         status TEXT NOT NULL DEFAULT 'free',
+        connection_status TEXT DEFAULT 'ONLINE',
+        last_seen TEXT,
+        last_heartbeat TEXT,
+        last_ip TEXT,
+        last_error TEXT,
         current_session_id TEXT,
         capabilities TEXT DEFAULT '[]',
         session_timeout_minutes INTEGER DEFAULT 30,
@@ -216,6 +223,30 @@ export async function runMigrations() {
       );
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS hardware_devices (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        device_node TEXT NOT NULL,
+        by_id TEXT,
+        by_path TEXT,
+        preferred_path TEXT NOT NULL,
+        is_persistent BOOLEAN NOT NULL DEFAULT true,
+        vendor_id TEXT,
+        product_id TEXT,
+        serial_number TEXT,
+        manufacturer TEXT,
+        model TEXT,
+        usb_bus TEXT,
+        usb_port TEXT,
+        capabilities TEXT DEFAULT '[]',
+        status TEXT NOT NULL DEFAULT 'AVAILABLE',
+        assigned_board_id TEXT,
+        first_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP::text,
+        last_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP::text
+      );
+    `);
+
     // Safe column adds for backward compatibility
     const safeAlter = async (sqlStr: string) => {
       try {
@@ -234,8 +265,23 @@ export async function runMigrations() {
     await safeAlter("ALTER TABLE boards ADD COLUMN IF NOT EXISTS board_image_url TEXT");
     await safeAlter("ALTER TABLE boards ADD COLUMN IF NOT EXISTS blank_bitstream_path TEXT");
     await safeAlter("ALTER TABLE boards ADD COLUMN IF NOT EXISTS ip_address TEXT");
+    await safeAlter("ALTER TABLE boards ADD COLUMN IF NOT EXISTS mac_address TEXT");
+    await safeAlter("ALTER TABLE boards ADD COLUMN IF NOT EXISTS hostname TEXT");
+    await safeAlter("ALTER TABLE boards ADD COLUMN IF NOT EXISTS connection_status TEXT DEFAULT 'ONLINE'");
+    await safeAlter("ALTER TABLE boards ADD COLUMN IF NOT EXISTS last_seen TEXT");
+    await safeAlter("ALTER TABLE boards ADD COLUMN IF NOT EXISTS last_heartbeat TEXT");
+    await safeAlter("ALTER TABLE boards ADD COLUMN IF NOT EXISTS last_ip TEXT");
+    await safeAlter("ALTER TABLE boards ADD COLUMN IF NOT EXISTS last_error TEXT");
     await safeAlter("ALTER TABLE boards ADD COLUMN IF NOT EXISTS ssh_username TEXT");
     await safeAlter("ALTER TABLE boards ADD COLUMN IF NOT EXISTS ssh_password TEXT");
+    await safeAlter("ALTER TABLE boards ADD COLUMN IF NOT EXISTS ssh_auth_type TEXT DEFAULT 'password'");
+    await safeAlter("ALTER TABLE boards ADD COLUMN IF NOT EXISTS ssh_key_path TEXT");
+    await safeAlter("ALTER TABLE boards ADD COLUMN IF NOT EXISTS camera_device_id TEXT");
+    await safeAlter("ALTER TABLE boards ADD COLUMN IF NOT EXISTS uart_device_id TEXT");
+    await safeAlter("ALTER TABLE boards ADD COLUMN IF NOT EXISTS jtag_device_id TEXT");
+    await safeAlter("ALTER TABLE boards ADD COLUMN IF NOT EXISTS mapping_status TEXT DEFAULT 'UNMAPPED'");
+    await safeAlter("ALTER TABLE boards ADD COLUMN IF NOT EXISTS mapping_verified_at TEXT");
+    await safeAlter("ALTER TABLE boards ADD COLUMN IF NOT EXISTS hardware_fingerprint TEXT DEFAULT '{}'");
     await safeAlter("ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'");
     await safeAlter("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TEXT");
     await safeAlter("ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 1");
@@ -244,6 +290,12 @@ export async function runMigrations() {
     // Create missing indexes
     await client.query("CREATE INDEX IF NOT EXISTS jobs_status_idx ON jobs(status)");
     await client.query("CREATE INDEX IF NOT EXISTS hw_sessions_status_idx ON hw_sessions(status)");
+    await client.query("CREATE INDEX IF NOT EXISTS hw_sessions_board_status_idx ON hw_sessions(board_id, status)");
+    await client.query("CREATE INDEX IF NOT EXISTS hardware_devices_type_idx ON hardware_devices(type)");
+    await client.query("CREATE INDEX IF NOT EXISTS hardware_devices_status_idx ON hardware_devices(status)");
+    await client.query("CREATE INDEX IF NOT EXISTS boards_status_idx ON boards(status)");
+    await client.query("CREATE INDEX IF NOT EXISTS refresh_tokens_user_idx ON refresh_tokens(user_id)");
+    await client.query("CREATE INDEX IF NOT EXISTS audit_logs_user_idx ON audit_logs(user_id)");
 
     await client.query("COMMIT");
     console.log("[DB] PostgreSQL Migrations complete successfully");

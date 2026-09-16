@@ -14,9 +14,10 @@ import { rateLimit, withErrorHandler } from "@/lib/api-utils";
 
 const signupSchema = z.object({
   email: z.string().email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  password: z.string().min(8, "Password must be at least 8 characters")
+    .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, "Password must contain uppercase, lowercase, and a number"),
   name: z.string().min(2, "Name must be at least 2 characters"),
-  role: z.enum(["student", "researcher"]).default("student"),
+  role: z.enum(["student"]).default("student"), // Researcher role must be assigned by admin
 });
 
 export const POST = withErrorHandler(async (req: NextRequest) => {

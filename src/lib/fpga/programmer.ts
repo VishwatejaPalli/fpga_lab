@@ -59,10 +59,10 @@ export class FPGAProgrammer extends EventEmitter {
         const safeBitstreamPath = bitstreamPath.replace(/[^a-zA-Z0-9_./-]/g, "");
         const remoteScript = `python3 -c "from pynq import Overlay; Overlay('/home/xilinx/lab_bitstream.bit')"`;
         
-        let scpCmd = `scp -o StrictHostKeyChecking=no ${safeBitstreamPath} ${username}@${ipAddress}:/home/xilinx/lab_bitstream.bit`;
-        let sshCmd = `ssh -o StrictHostKeyChecking=no ${username}@${ipAddress} '${remoteScript}'`;
+        let scpCmd = `scp -o StrictHostKeyChecking=accept-new ${safeBitstreamPath} ${username}@${ipAddress}:/home/xilinx/lab_bitstream.bit`;
+        let sshCmd = `ssh -o StrictHostKeyChecking=accept-new ${username}@${ipAddress} '${remoteScript}'`;
         
-        let envVars = { ...process.env };
+        const envVars = { ...process.env };
         if (password) {
           scpCmd = `sshpass -e ${scpCmd}`;
           sshCmd = `sshpass -e ${sshCmd}`;

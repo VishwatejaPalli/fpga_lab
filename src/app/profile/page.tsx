@@ -103,16 +103,16 @@ export default function ProfilePage() {
 
   // Soft gradient backgrounds for the page to match the premium aesthetic
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#d4e4f7] to-[#f4ecd8] dark:from-[#0a1128] dark:to-[#1a1c29] text-foreground transition-colors duration-500 relative">
+    <div className="min-h-screen pb-16 bg-background bg-grid-cockpit text-foreground transition-colors">
       <Navbar />
 
       <main className="max-w-5xl mx-auto px-4 py-8 relative z-10">
         
         {/* Main Card Container */}
-        <div className="bg-white dark:bg-[#0f172a] rounded-3xl shadow-[0_8px_30px_rgba(0,0,0,0.08)] overflow-hidden transition-colors duration-500">
+        <div className="cockpit-panel rounded-3xl border border-border overflow-hidden shadow-2xl">
           
           {/* Top Banner Gradient */}
-          <div className="h-40 w-full bg-gradient-to-r from-[#b3cbf2] via-[#dce2ee] to-[#fbf1dc] dark:from-[#1e3a8a] dark:to-[#7c2d12]"></div>
+          <div className="h-36 w-full bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-indigo-500/10 dark:from-blue-900/40 dark:via-purple-900/30 dark:to-slate-900/50 border-b border-border"></div>
           
           <div className="px-8 pb-10">
             {/* Profile Avatar & Header Info */}
@@ -120,16 +120,16 @@ export default function ProfilePage() {
               
               <div className="flex items-end gap-5">
                 {/* Avatar */}
-                <div className="w-32 h-32 rounded-full border-4 border-white dark:border-[#0f172a] bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-5xl font-bold shadow-lg shrink-0 overflow-hidden relative">
+                <div className="w-32 h-32 rounded-full border-4 border-card bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-white text-5xl font-bold shadow-xl shrink-0 overflow-hidden relative">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'U')}&background=random&color=fff&size=128`} alt="Profile" className="w-full h-full object-cover" />
                 </div>
                 
                 <div className="pb-2">
-                  <h1 className="text-2xl font-bold text-slate-800 dark:text-white leading-tight">
+                  <h1 className="text-2xl font-bold text-foreground leading-tight">
                     {user?.name}
                   </h1>
-                  <p className="text-slate-500 dark:text-slate-400 text-sm mt-0.5">
+                  <p className="text-muted font-mono text-xs mt-0.5">
                     {user?.email}
                   </p>
                 </div>
@@ -139,7 +139,7 @@ export default function ProfilePage() {
                 <button 
                   onClick={handleSave}
                   disabled={saving}
-                  className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-2.5 rounded-xl font-medium transition-colors shadow-md shadow-blue-500/20 disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-mono px-8 py-2.5 rounded-xl font-medium transition-all shadow-lg shadow-blue-600/25 disabled:opacity-70 disabled:cursor-not-allowed text-xs"
                 >
                   {saving ? "Saving..." : "Save Changes"}
                 </button>

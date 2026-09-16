@@ -17,6 +17,8 @@ interface NewProjectModalProps {
   handleCreateNewProject: (e: React.FormEvent) => void;
 }
 
+import { FolderIcon, XIcon } from "@/components/icons";
+
 export default function NewProjectModal({
   isNewProjectOpen,
   setIsNewProjectOpen,
@@ -41,14 +43,14 @@ export default function NewProjectModal({
       >
         <div className="px-6 py-4 bg-[#2b579a] text-white flex items-center justify-between font-bold text-sm">
           <span className="flex items-center gap-2">
-            <span>📁</span> Create New FPGA Project
+            <FolderIcon className="w-4 h-4" /> Create New FPGA Project
           </span>
           <button
             type="button"
             onClick={() => setIsNewProjectOpen(false)}
-            className="text-white/80 hover:text-white font-bold"
+            className="text-white/80 hover:text-white font-bold p-1 rounded"
           >
-            ✕
+            <XIcon className="w-4 h-4" />
           </button>
         </div>
 
@@ -124,7 +126,7 @@ export default function NewProjectModal({
           <button
             type="button"
             onClick={() => setIsNewProjectOpen(false)}
-            className="px-4 py-2 border border-slate-300 rounded-lg font-medium text-slate-700 hover:bg-slate-100"
+            className="px-4 py-2 border border-slate-300 hover:border-slate-400 rounded-lg font-medium text-slate-700 hover:bg-slate-200/50 transition-colors"
           >
             Cancel
           </button>

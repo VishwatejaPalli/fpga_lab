@@ -30,38 +30,36 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("theme") as Theme;
-    if (savedTheme) {
+    const savedTheme = (localStorage.getItem("theme") as Theme) || "light";
+    const savedAnimations = localStorage.getItem("animations") !== "false";
+    const savedFontSize = (localStorage.getItem("fontSize") as FontSize) || "medium";
+
+    document.documentElement.setAttribute("data-theme", savedTheme);
+    if (savedTheme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+    document.documentElement.setAttribute("data-animations", savedAnimations.toString());
+    document.documentElement.setAttribute("data-font-size", savedFontSize);
+
+    requestAnimationFrame(() => {
       setThemeState(savedTheme);
-      document.documentElement.setAttribute("data-theme", savedTheme);
-    } else {
-      document.documentElement.setAttribute("data-theme", "light");
-    }
-
-    const savedAnimations = localStorage.getItem("animations");
-    if (savedAnimations !== null) {
-      const isEnabled = savedAnimations === "true";
-      setAnimationsState(isEnabled);
-      document.documentElement.setAttribute("data-animations", isEnabled.toString());
-    } else {
-      document.documentElement.setAttribute("data-animations", "true");
-    }
-
-    const savedFontSize = localStorage.getItem("fontSize") as FontSize;
-    if (savedFontSize) {
+      setAnimationsState(savedAnimations);
       setFontSizeState(savedFontSize);
-      document.documentElement.setAttribute("data-font-size", savedFontSize);
-    } else {
-      document.documentElement.setAttribute("data-font-size", "medium");
-    }
-
-    setMounted(true);
+      setMounted(true);
+    });
   }, []);
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);
     localStorage.setItem("theme", newTheme);
     document.documentElement.setAttribute("data-theme", newTheme);
+    if (newTheme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
   };
 
   const setAnimations = (enabled: boolean) => {

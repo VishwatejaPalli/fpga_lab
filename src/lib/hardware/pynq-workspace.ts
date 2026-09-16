@@ -1,7 +1,7 @@
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import db from "@/lib/db";
-import { boards, hwSessions } from "@/lib/db/schema";
-import { decryptSafe } from "@/lib/auth/crypto";
+import { boards } from "@/lib/db/schema";
+import { PynqConnectionManager } from "./connection-manager";
 import crypto from "crypto";
 
 export const CLOUDLAB_ROOT = "/home/xilinx/cloudlab";
@@ -22,75 +22,17 @@ export function sanitizeUserId(userId: string): string {
   return `usr_${hash}`;
 }
 
-async function sshExec(
-  host: string,
-  username: string,
-  password: string,
-  command: string,
-  timeoutMs = 15000
-): Promise<string> {
-  const _require = eval("require") as NodeRequire;
-  const { Client } = _require("ssh2");
-
-  return new Promise((resolve, reject) => {
-    const client = new Client();
-    const timeout = setTimeout(() => {
-      client.end();
-      reject(new Error(`SSH command timed out after ${timeoutMs / 1000}s`));
-    }, timeoutMs);
-
-    client.on("ready", () => {
-      client.exec(command, (err: Error | null, stream: any) => {
-        if (err) {
-          clearTimeout(timeout);
-          client.end();
-          return reject(err);
-        }
-
-        let output = "";
-        stream.on("data", (data: Buffer) => {
-          output += data.toString();
-        });
-        stream.on("close", () => {
-          clearTimeout(timeout);
-          client.end();
-          resolve(output);
-        });
-      });
-    });
-
-    client.on("error", (err: Error) => {
-      clearTimeout(timeout);
-      reject(err);
-    });
-
-    client.connect({
-      host,
-      port: 22,
-      username,
-      password,
-      readyTimeout: timeoutMs,
-      keepaliveInterval: 0,
-    });
-  });
-}
-
 /**
- * Prepares a production PYNQ hardware session:
- *  1. Verifies board allocation ownership.
- *  2. Tests SSH reachability.
- *  3. Verifies free disk space threshold (>= 500MB).
- *  4. Tests Jupyter HTTP REST API responsiveness.
- *  5. Provisions isolated user directory (/home/xilinx/cloudlab/users/usr_...) & seeds templates in 1 SSH command.
- *  6. Returns structured diagnostics or direct proxied tree URL.
+ * Ensures user workspace folder (/home/xilinx/cloudlab/users/<sanitizedUserId>)
+ * exists on the target PYNQ board and sets up Jupyter symlinks.
  */
-export async function preparePynqSession(
+export async function ensurePynqUserWorkspace(
   boardId: string,
   userId: string
 ): Promise<PynqSessionResult> {
   const safeUserId = sanitizeUserId(userId);
 
-  // 1. Board lookup
+  // 1. Board lookup & status verification
   const [board] = await db.select().from(boards).where(eq(boards.id, boardId));
   if (!board) {
     return {
@@ -108,19 +50,7 @@ export async function preparePynqSession(
     };
   }
 
-  const host = board.ipAddress || board.devicePath;
-  if (!host) {
-    return {
-      success: false,
-      stage: "BOARD_RESERVATION",
-      message: "Board IP address or device path is not configured.",
-    };
-  }
-
-  const username = board.sshUsername || "xilinx";
-  const password = decryptSafe(board.sshPassword) || "xilinx";
-
-  // 2. SSH Connectivity & Health Check
+  // 2. SSH Connectivity & Health Check via Connection Manager
   const healthCheckCmd = [
     // Free disk space in MB on /
     "df -m / | tail -1 | awk '{print $4}'",
@@ -129,14 +59,18 @@ export async function preparePynqSession(
   ].join('; echo "|||"; ');
 
   let rawHealth = "";
+  let targetIp = board.ipAddress || "board";
+
   try {
-    rawHealth = await sshExec(host, username, password, healthCheckCmd, 10000);
+    const healthResult = await PynqConnectionManager.executeCommand(boardId, healthCheckCmd, 10000);
+    rawHealth = healthResult.stdout;
+    targetIp = healthResult.ipUsed;
   } catch (err: any) {
     console.error(`[pynq-workspace] SSH health check failed for ${boardId}:`, err.message);
     return {
       success: false,
       stage: "SSH_CONNECT",
-      message: `Failed to connect via SSH to board (${host}): ${err.message}`,
+      message: `Failed to connect via SSH to board (${targetIp}): ${err.message}`,
     };
   }
 
@@ -158,7 +92,7 @@ export async function preparePynqSession(
     return {
       success: false,
       stage: "JUPYTER_API",
-      message: `Jupyter service on board (${host}:9090) is not responding to REST API health check.`,
+      message: `Jupyter service on board (${targetIp}:9090) is not responding to REST API health check.`,
     };
   }
 
@@ -175,8 +109,8 @@ export async function preparePynqSession(
   ].join(" && ");
 
   try {
-    const provOutput = await sshExec(host, username, password, provisioningCmd, 12000);
-    if (!provOutput.includes("PROVISION_OK")) {
+    const provResult = await PynqConnectionManager.executeCommand(boardId, provisioningCmd, 12000);
+    if (!provResult.stdout.includes("PROVISION_OK")) {
       return {
         success: false,
         stage: "WORKSPACE_PROVISION",
@@ -200,3 +134,5 @@ export async function preparePynqSession(
     sanitizedUserId: safeUserId,
   };
 }
+
+export { ensurePynqUserWorkspace as preparePynqSession };

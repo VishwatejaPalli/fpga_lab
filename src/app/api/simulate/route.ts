@@ -17,6 +17,9 @@ interface VcdSignal {
   changes: [number, string][];
 }
 
+const SAFE_IDENTIFIER = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+const SAFE_FILENAME = /^[a-zA-Z0-9_][a-zA-Z0-9_.\-]*$/;
+
 // Simple VCD parser to map signal changes
 function parseVcd(vcdText: string) {
   const lines = vcdText.split("\n");
@@ -184,6 +187,10 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       let content = fs.readFileSync(file, "utf-8");
       const baseName = path.basename(file);
 
+      if (!SAFE_FILENAME.test(baseName)) {
+        continue;
+      }
+
       // Auto-inject VCD dump if it's the testbench and doesn't have it (only for Verilog/SystemVerilog)
       if (mode !== "ghdl") {
         if (baseName.toLowerCase().includes("tb") || baseName.toLowerCase().includes("testbench")) {
@@ -194,11 +201,13 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
               .replace(".sv", "")
               .replace(".v", "");
             
-            // Insert VCD dumping variables right after "initial begin"
-            content = content.replace(
-              /initial\s+begin/,
-              `initial begin\n        $dumpfile("waves.vcd");\n        $dumpvars(0, ${moduleName});`
-            );
+            if (SAFE_IDENTIFIER.test(moduleName)) {
+              // Insert VCD dumping variables right after "initial begin"
+              content = content.replace(
+                /initial\s+begin/,
+                `initial begin\n        $dumpfile("waves.vcd");\n        $dumpvars(0, ${moduleName});`
+              );
+            }
           }
         }
       }
@@ -213,11 +222,11 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     const vcdFilePath = path.join(simTempDir, "waves.vcd");
 
     if (mode === "ghdl") {
-      if (!testbenchEntityName) {
+      if (!testbenchEntityName || !SAFE_IDENTIFIER.test(testbenchEntityName)) {
         return NextResponse.json({
           success: false,
           step: "compile",
-          logs: "[GHDL Error] Could not find any VHDL entity to simulate in the workspace."
+          logs: "[GHDL Error] Invalid or missing VHDL entity name to simulate."
         }, { status: 422 });
       }
 
@@ -351,15 +360,93 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       }, { status: 422 });
     }
 
-    // Parse VCD file
-    const vcdContent = fs.readFileSync(vcdFilePath, "utf-8");
-    const parsedData = parseVcd(vcdContent);
+    // Limit VCD file size to prevent OOM
+    const stat = fs.statSync(vcdFilePath);
+    const MAX_VCD_SIZE = 10 * 1024 * 1024; // 10MB
+    let vcdContent = "";
+    if (stat.size > MAX_VCD_SIZE) {
+      const buffer = Buffer.alloc(MAX_VCD_SIZE);
+      const fd = fs.openSync(vcdFilePath, "r");
+      fs.readSync(fd, buffer, 0, MAX_VCD_SIZE, 0);
+      fs.closeSync(fd);
+      vcdContent = buffer.toString("utf-8");
+      stdoutLogs += "\n[Warning] Simulation produced a massive VCD file. Waveform was truncated to save memory.";
+    } else {
+      vcdContent = fs.readFileSync(vcdFilePath, "utf-8");
+    }
+
+    // Parse VCD file (limit to max 10k changes per signal to prevent browser crash)
+    const lines = vcdContent.split("\n");
+    const signals: VcdSignal[] = [];
+    const codeToSignal: Record<string, VcdSignal> = {};
+    
+    let inHeader = true;
+    let currentTime = 0;
+    let timescale = "1ns";
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      if (inHeader) {
+        if (line.startsWith("$timescale")) {
+          if (line === "$timescale" && lines[i + 1]) {
+            timescale = lines[i + 1].trim().replace("$end", "");
+            i++;
+          } else {
+            timescale = line.replace("$timescale", "").replace("$end", "").trim();
+          }
+        }
+
+        if (line.startsWith("$var")) {
+          const parts = line.split(/\s+/);
+          const type = parts[1];
+          const size = parseInt(parts[2], 10);
+          const code = parts[3];
+          const name = parts.slice(4, parts.length - 1).join(" ");
+          
+          const sig: VcdSignal = {
+            name,
+            code,
+            type,
+            size,
+            changes: []
+          };
+          signals.push(sig);
+          codeToSignal[code] = sig;
+        }
+
+        if (line.startsWith("$enddefinitions")) {
+          inHeader = false;
+        }
+        continue;
+      }
+
+      if (line.startsWith("#")) {
+        currentTime = parseInt(line.substring(1), 10);
+      } else if (line.startsWith("b") || line.startsWith("B")) {
+        const parts = line.substring(1).split(/\s+/);
+        const val = parts[0];
+        const code = parts[1];
+        if (codeToSignal[code] && codeToSignal[code].changes.length < 10000) {
+          codeToSignal[code].changes.push([currentTime, val]);
+        }
+      } else {
+        const val = line.substring(0, 1);
+        const code = line.substring(1);
+        if (codeToSignal[code] && codeToSignal[code].changes.length < 10000) {
+          codeToSignal[code].changes.push([currentTime, val]);
+        }
+      }
+    }
+
+    const parsedData = { timescale, signals };
 
     return NextResponse.json({
       success: true,
       logs: stdoutLogs,
       waves: parsedData,
-      vcdText: vcdContent
+      vcdText: "" // omitted to save network bandwidth
     });
 
   } catch (error: any) {

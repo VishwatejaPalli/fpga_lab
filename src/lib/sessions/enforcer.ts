@@ -76,18 +76,19 @@ class SessionEnforcer {
         const files = fs.readdirSync(userDir);
         for (const file of files) {
           const filePath = path.join(userDir, file);
+          if (!fs.existsSync(filePath)) continue;
           const stats = fs.statSync(filePath);
           
           if (stats.isDirectory()) {
              // Handle uuid folders from new upload route
              const innerFiles = fs.readdirSync(filePath);
-             for(const innerFile of innerFiles) {
+             for (const innerFile of innerFiles) {
                 const innerPath = path.join(filePath, innerFile);
-                if (now - fs.statSync(innerPath).mtimeMs > maxAgeMs) {
+                if (fs.existsSync(innerPath) && now - fs.statSync(innerPath).mtimeMs > maxAgeMs) {
                    fs.rmSync(innerPath, { recursive: true, force: true });
                 }
              }
-             if (fs.readdirSync(filePath).length === 0) {
+             if (fs.existsSync(filePath) && fs.readdirSync(filePath).length === 0) {
                 fs.rmdirSync(filePath);
              }
           } else if (now - stats.mtimeMs > maxAgeMs) {
@@ -141,6 +142,7 @@ class SessionEnforcer {
 
           if (!result.success) {
             resetSuccess = await resetBoard({
+              boardId: board.id,
               boardType: board.boardType,
               programmingTool: board.programmingTool || "openFPGALoader",
               devicePath: board.devicePath,
@@ -152,6 +154,7 @@ class SessionEnforcer {
         } else {
           // Fallback to reset if no blank bitstream is configured
           resetSuccess = await resetBoard({
+            boardId: board.id,
             boardType: board.boardType,
             programmingTool: board.programmingTool || "openFPGALoader",
             devicePath: board.devicePath,

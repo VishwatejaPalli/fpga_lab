@@ -9,11 +9,6 @@
  * front-end doesn't hammer the board with SSH connections.
  */
 
-import { eq } from "drizzle-orm";
-import db from "@/lib/db";
-import { boards } from "@/lib/db/schema";
-import { decryptSafe } from "@/lib/auth/crypto";
-
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface PynqTelemetry {
@@ -100,7 +95,18 @@ interface CacheEntry {
 }
 
 const cache = new Map<string, CacheEntry>();
-const CACHE_TTL_MS = 2000; // 2 seconds
+const CACHE_TTL_MS = 5000; // 5 seconds (prevents SSH connection spamming from front-end polling)
+
+/**
+ * Get cached telemetry without attempting SSH connection if missing or stale
+ */
+export function getTelemetryCached(boardId: string): PynqTelemetry | null {
+  const cached = cache.get(boardId);
+  if (cached) {
+    return cached.data;
+  }
+  return null;
+}
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -232,70 +238,11 @@ function parseTelemetryOutput(raw: string): PynqTelemetry {
   };
 }
 
-// ─── SSH exec helper ───────────────────────────────────────────────────────
-
-async function sshExec(
-  host: string,
-  username: string,
-  password: string,
-  command: string
-): Promise<string> {
-  // Dynamic import to avoid Turbopack build issues with native modules
-  const _require = eval("require") as NodeRequire;
-  const { Client } = _require("ssh2");
-
-  return new Promise((resolve, reject) => {
-    const client = new Client();
-    const timeout = setTimeout(() => {
-      client.end();
-      reject(new Error("SSH command timed out after 15s"));
-    }, 15000);
-
-    client.on("ready", () => {
-      client.exec(command, (err: Error | null, stream: any) => {
-        if (err) {
-          clearTimeout(timeout);
-          client.end();
-          return reject(err);
-        }
-
-        let output = "";
-        stream.on("data", (data: Buffer) => {
-          output += data.toString();
-        });
-        stream.stderr.on("data", (data: Buffer) => {
-          // Ignore stderr (pip warnings etc)
-        });
-        stream.on("close", () => {
-          clearTimeout(timeout);
-          client.end();
-          resolve(output);
-        });
-      });
-    });
-
-    client.on("error", (err: Error) => {
-      clearTimeout(timeout);
-      reject(err);
-    });
-
-    client.connect({
-      host,
-      port: 22,
-      username,
-      password,
-      readyTimeout: 15000,
-      // Prevent keepalive from interfering with quick commands
-      keepaliveInterval: 0,
-    });
-  });
-}
-
 // ─── Public API ────────────────────────────────────────────────────────────
 
 /**
  * Fetch real-time telemetry from a PYNQ board by boardId.
- * Returns cached results if within TTL.
+ * Returns cached results if within TTL. Uses PynqConnectionManager.
  */
 export async function fetchPynqTelemetry(
   boardId: string
@@ -306,67 +253,26 @@ export async function fetchPynqTelemetry(
     return cached.data;
   }
 
-  // Look up board in DB
-  const [board] = await db.select().from(boards).where(eq(boards.id, boardId));
+  const { PynqConnectionManager } = await import("./connection-manager");
+  const execRes = await PynqConnectionManager.executeCommand(boardId, TELEMETRY_CMD, 10000);
+  const telemetry = parseTelemetryOutput(execRes.stdout);
 
-  if (!board || !board.ipAddress) {
-    throw new Error(`Board ${boardId} not found or IP not configured`);
+  if (telemetry.network.ip === "N/A" && execRes.ipUsed) {
+    telemetry.network.ip = execRes.ipUsed;
   }
 
-  const host = board.ipAddress;
-  const username = board.sshUsername || "xilinx";
-  const password = decryptSafe(board.sshPassword) || "xilinx";
-
-  const raw = await sshExec(host, username, password, TELEMETRY_CMD);
-  const telemetry = parseTelemetryOutput(raw);
-
-  // Patch in the real IP (in case hostname -I had issues)
-  if (telemetry.network.ip === "N/A") {
-    telemetry.network.ip = host;
-  }
-
-  // Cache result
   cache.set(boardId, { data: telemetry, fetchedAt: Date.now() });
-
   return telemetry;
 }
 
 /**
- * Quick connectivity check — attempts SSH with a 5-second timeout.
+ * Quick connectivity check — attempts SSH using PynqConnectionManager.
  */
 export async function checkPynqOnline(boardId: string): Promise<boolean> {
   try {
-    const [board] = await db.select().from(boards).where(eq(boards.id, boardId));
-    if (!board || !board.ipAddress) return false;
-
-    const _require = eval("require") as NodeRequire;
-    const { Client } = _require("ssh2");
-
-    return new Promise((resolve) => {
-      const client = new Client();
-      const timeout = setTimeout(() => {
-        client.end();
-        resolve(false);
-      }, 5000);
-
-      client.on("ready", () => {
-        clearTimeout(timeout);
-        client.end();
-        resolve(true);
-      });
-      client.on("error", () => {
-        clearTimeout(timeout);
-        resolve(false);
-      });
-
-      client.connect({
-        host: board.ipAddress!,
-        port: 22,
-        username: board.sshUsername || "xilinx",
-        password: decryptSafe(board.sshPassword) || "xilinx",
-        readyTimeout: 5000,
-      });
-    });
+    const { PynqConnectionManager } = await import("./connection-manager");
+    const res = await PynqConnectionManager.executeCommand(boardId, "hostname -I", 5000);
+    return res.exitCode === 0;
   } catch {
     return false;
   }

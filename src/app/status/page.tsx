@@ -11,6 +11,12 @@ interface BoardInfo {
   fpgaFamily: string;
   status: string;
   connectionType: string;
+  macAddress?: string;
+  hostname?: string;
+  ipAddress?: string;
+  connectionStatus?: string;
+  lastSeen?: string;
+  lastError?: string;
 }
 
 interface RecentJob {
@@ -175,24 +181,37 @@ export default function StatusPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-foreground/5 text-left text-xs font-bold uppercase tracking-wider text-muted border-b border-border">
-                      <th className="px-6 py-3.5">Board Reference</th>
-                      <th className="px-6 py-3.5">Target Type</th>
+                      <th className="px-6 py-3.5">Board Reference & Identity</th>
+                      <th className="px-6 py-3.5">Network Locator</th>
                       <th className="px-6 py-3.5">FPGA Silicon</th>
                       <th className="px-6 py-3.5">Link Mode</th>
-                      <th className="px-6 py-3.5 text-right">Operational Status</th>
+                      <th className="px-6 py-3.5 text-right">Connection Health</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {data.boards.list.map((b) => (
                       <tr key={b.id} className="hover:bg-foreground/5 transition-colors">
-                        <td className="px-6 py-4 font-bold text-foreground">{b.name}</td>
-                        <td className="px-6 py-4 text-muted font-mono text-xs">{b.boardType}</td>
+                        <td className="px-6 py-4">
+                          <div className="font-bold text-foreground">{b.name}</div>
+                          {b.macAddress && (
+                            <div className="text-[10px] font-mono text-muted">MAC: {b.macAddress}</div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-muted font-mono text-xs">
+                          <div>{b.hostname || b.boardType}</div>
+                          {b.ipAddress && <div className="text-[10px] text-muted/70">{b.ipAddress}</div>}
+                        </td>
                         <td className="px-6 py-4 text-muted font-mono text-xs">{b.fpgaFamily}</td>
                         <td className="px-6 py-4 text-muted capitalize font-medium">{b.connectionType}</td>
                         <td className="px-6 py-4 text-right">
-                          <span className="inline-flex items-center gap-2 bg-foreground/5 border border-border rounded-full px-3 py-1 text-xs">
-                            {statusDot(b.status)}
-                            <span className="capitalize font-semibold text-foreground">{b.status}</span>
+                          <span className="inline-flex flex-col items-end gap-1">
+                            <span className="inline-flex items-center gap-1.5 bg-foreground/5 border border-border rounded-full px-2.5 py-0.5 text-xs font-bold font-mono">
+                              {statusDot(b.status)}
+                              <span>{b.connectionStatus || b.status.toUpperCase()}</span>
+                            </span>
+                            {b.lastError && (
+                              <span className="text-[9px] text-rose-400 max-w-[180px] truncate">{b.lastError}</span>
+                            )}
                           </span>
                         </td>
                       </tr>

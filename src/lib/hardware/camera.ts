@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "child_process";
 import { EventEmitter } from "events";
+import fs from "fs";
 
 /**
  * Camera Service — manages ffmpeg processes for WebRTC streaming via MediaMTX.
@@ -19,13 +20,19 @@ class CameraService extends EventEmitter {
       }
     }
 
+    if (!cameraDevice || cameraDevice === "mock" || cameraDevice === "test") {
+      console.warn(`[Camera] No physical camera device configured for board ${boardId}. Skipping stream startup.`);
+      return;
+    }
+
     const isWindows = process.platform === "win32";
-    const isMock = cameraDevice === "mock" || cameraDevice === "test" || !cameraDevice;
-    
-    const inputFormat = isMock ? "lavfi" : (isWindows ? "dshow" : "v4l2");
-    const inputDevice = isMock 
-      ? "testsrc=size=640x480:rate=30" 
-      : (isWindows && !cameraDevice.startsWith("video=") ? `video=${cameraDevice}` : cameraDevice);
+    if (!isWindows && !fs.existsSync(cameraDevice)) {
+      console.warn(`[Camera] Physical video device node does not exist: ${cameraDevice} for board ${boardId}`);
+      return;
+    }
+
+    const inputFormat = isWindows ? "dshow" : "v4l2";
+    const inputDevice = isWindows && !cameraDevice.startsWith("video=") ? `video=${cameraDevice}` : cameraDevice;
 
     // Push H.264 encoded RTSP to MediaMTX
     const ffmpeg = spawn("ffmpeg", [

@@ -8,6 +8,10 @@ import { uartService } from "@/lib/hardware/uart";
 import { sshService } from "@/lib/hardware/ssh";
 import { cameraService } from "@/lib/hardware/camera";
 import { boardHealthMonitor } from "@/lib/hardware/board-health";
+import { syncHardwareRegistry } from "@/lib/hardware/device-registry";
+import { PynqConnectionManager } from "@/lib/hardware/connection-manager";
+
+import { validateEnv } from "./validate-env";
 
 let initialized = false;
 
@@ -21,6 +25,9 @@ export async function initializeServer() {
     return;
   }
   initialized = true;
+
+  // Validate critical production environment secrets
+  validateEnv();
 
   console.log("[Init] Initializing server...");
 
@@ -54,22 +61,21 @@ export async function initializeServer() {
           const failed = subJobs.filter((sj) => sj.status === "failed" || sj.status === "cancelled").length;
           const done = completed + failed;
 
-          let batchStatus: "failed" | "pending" | "running" | "completed" = "running";
-          if (done >= total) {
-            batchStatus = failed > 0 ? "failed" : "completed";
+          if (done === total) {
+            const finalStatus: "completed" | "failed" = failed > 0 && completed === 0 ? "failed" : "completed";
+            await db
+              .update(batchJobs)
+              .set({
+                status: finalStatus,
+                completedAt: new Date().toISOString(),
+              })
+              .where(eq(batchJobs.id, batchId));
+          } else {
+            await db
+              .update(batchJobs)
+              .set({ status: "running" })
+              .where(eq(batchJobs.id, batchId));
           }
-
-          await db
-            .update(batchJobs)
-            .set({
-              status: batchStatus,
-              completedBoards: completed,
-              failedBoards: failed,
-              completedAt: done >= total ? new Date().toISOString() : null,
-            })
-            .where(eq(batchJobs.id, batchId));
-
-          console.log(`[Batch] Updated batch ${batchId}: ${done}/${total} done (status: ${batchStatus})`);
         }
       } catch (err) {
         console.error("[Batch] Error updating batch status on job complete:", err);
@@ -79,6 +85,9 @@ export async function initializeServer() {
     // Start session enforcer
     sessionEnforcer.start();
 
+    // Synchronize Hardware Device Registry on startup
+    await syncHardwareRegistry();
+
     // Start board health monitor
     boardHealthMonitor.start();
 
@@ -87,6 +96,7 @@ export async function initializeServer() {
     (globalThis as Record<string, unknown>).__uartService = uartService;
     (globalThis as Record<string, unknown>).__sshService = sshService;
     (globalThis as Record<string, unknown>).__cameraService = cameraService;
+    (globalThis as Record<string, unknown>).__connectionManager = PynqConnectionManager;
 
     console.log("[Init] Server initialized successfully");
   } catch (err: any) {

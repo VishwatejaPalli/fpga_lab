@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { AlertTriangleIcon, ZapIcon, AlertCircleIcon } from "@/components/icons";
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -41,20 +42,20 @@ export default function ConfirmModal({
     switch (variant) {
       case "danger":
         return (
-          <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500 text-xl shrink-0">
-            ⚠️
+          <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500 shrink-0">
+            <AlertTriangleIcon className="w-6 h-6" />
           </div>
         );
       case "warning":
         return (
-          <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 text-xl shrink-0">
-            ⚡
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 shrink-0">
+            <ZapIcon className="w-6 h-6" />
           </div>
         );
       default:
         return (
-          <div className="w-12 h-12 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500 text-xl shrink-0">
-            ℹ️
+          <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500 shrink-0">
+            <AlertCircleIcon className="w-6 h-6" />
           </div>
         );
     }
@@ -72,9 +73,9 @@ export default function ConfirmModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
       <div 
-        className="w-full max-w-md bg-[#0f172a]/95 border border-slate-700/60 rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
+        className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
         role="dialog"
         aria-modal="true"
       >
@@ -82,17 +83,17 @@ export default function ConfirmModal({
           <div className="flex items-start gap-4">
             {getIcon()}
             <div className="flex-1 min-w-0">
-              <h3 className="text-lg font-semibold text-white tracking-tight">
+              <h3 className="text-lg font-semibold text-foreground tracking-tight">
                 {title}
               </h3>
-              <p className="mt-2 text-sm text-slate-300 leading-relaxed">
+              <p className="mt-2 text-sm text-muted leading-relaxed">
                 {message}
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-slate-900/60 px-6 py-4 border-t border-slate-800 flex justify-end gap-3 items-center">
+        <div className="bg-muted/30 px-6 py-4 border-t border-border flex justify-end gap-3 items-center">
           <button
             type="button"
             onClick={onClose}

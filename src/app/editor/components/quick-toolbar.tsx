@@ -1,5 +1,7 @@
 "use client";
 
+import { SettingsIcon, PlayIcon, BoxIcon } from "@/components/icons";
+
 interface QuickToolbarProps {
   handleOpenSettings: () => void;
   openTab: (id: string, label: string, type: "file" | "view") => void;
@@ -34,7 +36,7 @@ export default function QuickToolbar({
         className="flex items-center gap-1.5 px-2 py-0.5 hover:bg-[#2b579a]/10 rounded text-slate-700 text-[11px] font-medium border border-[#cbd5e1] bg-white"
         title="Project Settings"
       >
-        <span className="text-blue-600">⚙️</span> Settings
+        <SettingsIcon className="w-3.5 h-3.5 text-blue-600" /> Settings
       </button>
 
       <button
@@ -53,7 +55,7 @@ export default function QuickToolbar({
         className="flex items-center gap-1.5 px-2 py-0.5 bg-white hover:bg-emerald-50 border border-[#cbd5e1] text-emerald-700 rounded text-[11px] font-bold disabled:opacity-50"
         title="Run Behavioral Simulation"
       >
-        <span className="text-emerald-600">▶</span> Run Simulation
+        <PlayIcon className="w-2.5 h-2.5 text-emerald-600" /> Run Simulation
       </button>
 
       <button
@@ -62,7 +64,7 @@ export default function QuickToolbar({
         className="flex items-center gap-1.5 px-2 py-0.5 bg-white hover:bg-blue-50 border border-[#cbd5e1] text-blue-700 rounded text-[11px] font-bold disabled:opacity-50"
         title="Run Logic Synthesis (F11)"
       >
-        <span className="text-blue-600">▶</span> Run Synthesis
+        <PlayIcon className="w-2.5 h-2.5 text-blue-600" /> Run Synthesis
       </button>
 
       <button
@@ -71,7 +73,7 @@ export default function QuickToolbar({
         className="flex items-center gap-1.5 px-2 py-0.5 bg-white hover:bg-purple-50 border border-[#cbd5e1] text-purple-700 rounded text-[11px] font-bold disabled:opacity-50"
         title="Run Implementation (Place & Route)"
       >
-        <span className="text-purple-600">▶</span> Run Implementation
+        <PlayIcon className="w-2.5 h-2.5 text-purple-600" /> Run Implementation
       </button>
 
       <button
@@ -80,7 +82,7 @@ export default function QuickToolbar({
         className="flex items-center gap-1.5 px-2 py-0.5 bg-[#ffffff] hover:bg-amber-50 border border-[#cbd5e1] text-amber-700 rounded text-[11px] font-bold disabled:opacity-50"
         title="Generate Bitstream (.bit)"
       >
-        <span>📦</span> Generate Bitstream
+        <BoxIcon className="w-3.5 h-3.5 text-amber-600" /> Generate Bitstream
       </button>
 
       <div className="ml-auto flex items-center gap-2 text-[11px]">

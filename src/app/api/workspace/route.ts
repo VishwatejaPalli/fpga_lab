@@ -245,11 +245,11 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     return NextResponse.json({ error: "fileName and content are required." }, { status: 400 });
   }
 
-  const userWorkspaceDir = path.join(WORKSPACE_BASE_DIR, session.userId);
+  const userWorkspaceDir = path.resolve(WORKSPACE_BASE_DIR, session.userId);
   
   // Resolve absolute path and check for directory traversal
   const filePath = path.resolve(userWorkspaceDir, fileName);
-  if (!filePath.startsWith(userWorkspaceDir)) {
+  if (filePath !== userWorkspaceDir && !filePath.startsWith(userWorkspaceDir + path.sep)) {
     return NextResponse.json({ error: "Invalid path (directory traversal attempt)" }, { status: 400 });
   }
 
@@ -281,9 +281,9 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
     return NextResponse.json({ error: "fileName parameter is required." }, { status: 400 });
   }
 
-  const userWorkspaceDir = path.join(WORKSPACE_BASE_DIR, session.userId);
+  const userWorkspaceDir = path.resolve(WORKSPACE_BASE_DIR, session.userId);
   const filePath = path.resolve(userWorkspaceDir, fileName);
-  if (!filePath.startsWith(userWorkspaceDir)) {
+  if (filePath !== userWorkspaceDir && !filePath.startsWith(userWorkspaceDir + path.sep)) {
     return NextResponse.json({ error: "Invalid path (directory traversal attempt)" }, { status: 400 });
   }
 

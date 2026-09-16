@@ -3,7 +3,7 @@ import crypto from "crypto";
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
 const KEY_LENGTH = 32;
-const ITERATIONS = 10000;
+const ITERATIONS = 100000;
 
 function getEncryptionKey(): Buffer {
   const secret = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || "dev-secret-change-me";
@@ -64,7 +64,9 @@ export function decryptSafe(encryptedText: string | null | undefined): string | 
   try {
     return decrypt(encryptedText);
   } catch {
-    // Fallback in case of corruption or if plaintext contains colons
-    return encryptedText;
+    // Decryption failed — key mismatch or data corruption.
+    // Return null instead of leaking ciphertext as a plaintext password.
+    console.warn("[Crypto] decryptSafe: decryption failed, returning null (possible key mismatch or data corruption)");
+    return null;
   }
 }

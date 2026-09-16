@@ -1,39 +1,58 @@
-# FPGA Remote Lab - Future Functional Improvements
+# FPGA Remote Lab - Functional Roadmap & Future Improvements
 
-This document outlines potential high-impact functional improvements that could be implemented to elevate the platform to an enterprise-grade/top-tier university remote lab.
+This document tracks completed platform milestones and outlines high-impact upcoming functional improvements to elevate the platform to an enterprise-grade/top-tier university remote hardware laboratory.
 
-## 1. In-Browser Code Editor & Cloud Synthesis
-**Goal:** Allow students to write, compile, and deploy hardware descriptions entirely in the browser without installing local CAD tools.
-- **Implementation:** Integrate Monaco Editor (VS Code core) into the web interface.
-- **Backend:** Setup a Dockerized synthesis pipeline (using open-source tools like Yosys/NextPNR or Xilinx Vivado in headless mode). When a user clicks "Compile", the backend runs synthesis, generates the `.bit` file, and seamlessly queues it for programming.
+---
 
-## 2. Automated Grading & Hardware Testing (Autograder)
-**Goal:** Automate the grading process for instructors by testing the physical hardware responses against a script.
-- **Implementation:** Instructors upload hidden Python validation scripts.
-- **Backend:** When a student submits an assignment, the system programs the board and executes the Python script. The script interacts with the student's hardware via the UART interface (sending stimuli and reading responses) and automatically scores the lab based on correctness.
+## ✅ Recently Completed Features
 
-## 3. Calendar Scheduling & Reservations
-**Goal:** Ensure students have guaranteed, uninterrupted access to hardware during busy periods (like finals week).
-- **Implementation:** Build a calendar UI where users can reserve 1-hour or 2-hour blocks for specific boards.
-- **Backend:** The job queue automatically rejects or pauses jobs from non-reserved users if a reservation block is currently active for a specific board.
+### 1. Interactive Virtual I/O & Automated Stimulus Pattern Generator
+- **Keyboard Hotkeys:** Mapped keys `0`–`9` and `A`–`F` for instant switch toggling (`SW0`–`SW15`) and `Space` for push buttons (`BTN0`).
+- **Pattern Generator:** Automated test modes including **Binary Counter** (1–10 Hz), **Shift / Walking 1s**, **Clock Pulse Step**, and **Random Stimulus**.
 
-## 4. Multi-File Project Uploads (ZIP / Notebooks)
-**Goal:** Support complex SoC projects (like PYNQ) that require multiple files to function correctly.
-- **Implementation:** Update the upload API to accept `.zip` files.
-- **Backend:** The server extracts the zip, deploying the `.bit` file, the `.hwh` (hardware handoff) file, and any custom Jupyter Notebooks (`.ipynb`) directly into the correct directories on the PYNQ board before starting the session.
+### 2. Camera Stream Controls & Snapshot Tooling
+- **WebRTC Streaming:** Low-latency WebRTC live hardware video feed.
+- **Digital Zoom & Video Filters:** 100% to 250% digital zoom with brightness/contrast adjustment sliders.
+- **1-Click Frame Snapshot:** Generates and downloads timestamped PNG snapshots (`fpga_snapshot_<boardId>.png`) for lab submissions.
 
-## 5. Web-Based Logic Analyzer (Waveform Viewer)
-**Goal:** Provide deep, visual hardware debugging capabilities in the browser.
-- **Implementation:** Integrate a waveform viewer library (such as WaveDrom or Surfer).
-- **Backend:** Interface with the Integrated Logic Analyzer (ILA) on the FPGA via XVC (Xilinx Virtual Cable). Capture signal states during execution and stream them to the browser for visual analysis.
+### 3. Pre-Flight Bitstream Header Parsing & Chip Verification
+- **Xilinx `.bit` Header Inspection:** Client-side binary parsing of uploaded `.bit` files to extract target chip part strings (e.g. `7a35t` for Basys 3 or `7z020` for PYNQ-Z2).
+- **Architecture Validation:** Displays target board compatibility badges and alerts users to chip architecture mismatches prior to flashing.
 
-## 6. WebRTC Camera Streaming
-**Goal:** Drastically reduce bandwidth and latency for the live hardware camera feeds.
-- **Implementation:** Replace the current MJPEG-over-WebSockets approach with WebRTC (Real-Time Communication).
-- **Backend:** Use a lightweight WebRTC server (like Pion or GStreamer) to capture the USB webcam and peer-to-peer stream 60fps video directly to the student's browser with sub-100ms latency.
+### 4. 1-Click Lab Submission Package Exporter
+- **Formatted Report Generator:** One-click export producing downloadable HTML verification reports containing session metadata, hardware state snapshots, and complete UART console log histories.
 
-## 7. Isolated Per-User PYNQ Workspaces
-**Goal:** Prevent shared directory clutter and ensure student project persistence across lab sessions on physical PYNQ boards.
-- **Implementation:** Upon session initialization, the backend SSH service creates an isolated directory per student (e.g. `/home/xilinx/cloudlab/<userId>`) and configures/symlinks the Jupyter root to that directory before proxying traffic.
-- **Benefits:** Complete project isolation, student work persistence across sessions, simplified instructor assignment grading/downloads, and protection against accidental file overwrites in shared directories.
+### 5. Proactive Session Expiration Alerts & Board Waitlists
+- **Expiration Alerts:** Interactive floating warning modal when session time drops below 3 minutes with quick `+15m` extension.
+- **Availability Waitlist:** "Notify Me When Free" toggle on busy/allocated boards with automated polling toast alerts.
 
+---
+
+## 🔮 Upcoming High-Impact Roadmap Items
+
+### 1. Automated Grading & Hardware Testing (Autograder)
+**Goal:** Automate lab assignment grading for instructors by testing physical FPGA hardware responses against validation scripts.
+- **Implementation:** Instructors upload hidden Python test scripts.
+- **Execution:** Upon submission, the platform programs the FPGA and runs the test script over UART (sending stimulus patterns and validating pin responses) to score the lab automatically.
+
+### 2. Calendar Scheduling & Board Reservations
+**Goal:** Guarantee student hardware access during high-traffic periods (such as exam weeks).
+- **Implementation:** Interactive calendar UI for booking 1-hour or 2-hour reserved blocks on target boards.
+- **Backend:** Reservation-enforced job queues that prioritize reserved time slots and prevent session hijacking.
+
+### 3. Multi-File Project Uploads (ZIP / Notebooks)
+**Goal:** Support complex SoC projects (like PYNQ) requiring multiple associated design files.
+- **Implementation:** Accept `.zip` archive uploads containing `.bit` bitstreams, `.hwh` hardware handoff files, and `.ipynb` Jupyter notebooks.
+- **Backend:** Automatically extract and deploy files to designated directories on physical PYNQ targets prior to session launch.
+
+### 4. Web-Based Logic Analyzer (WaveDrom / VCD Export)
+**Goal:** Advanced visual waveform debugging and signal export in the browser.
+- **Implementation:** Integrate WaveDrom waveform rendering and support exporting captured Logic Analyzer history into standard Value Change Dump (`.vcd`) files for analysis in GTKWave.
+
+### 5. Isolated Per-User PYNQ Workspaces
+**Goal:** Ensure student project isolation and persistence on shared PYNQ Linux targets.
+- **Implementation:** SSH service automatically provisions per-user directories (`/home/xilinx/cloudlab/<userId>`) and symlinks Jupyter root per session.
+
+### 6. LTI / LMS (Canvas / Blackboard) Integration
+**Goal:** Seamless integration into university Learning Management Systems.
+- **Implementation:** LTI 1.3 authentication for Single Sign-On (SSO) and automatic gradebook syncing for completed FPGA lab assignments.

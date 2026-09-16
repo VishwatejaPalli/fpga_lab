@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { getSession } from "@/lib/auth/session";
 
 const ALLOWED_ACTIONS: Record<string, string[]> = {
@@ -9,6 +9,8 @@ const ALLOWED_ACTIONS: Record<string, string[]> = {
   "list-cables": ["--list-cables"],
   "list-fpga": ["--list-fpga"],
 };
+
+const SAFE_PARAM_REGEX = /^[a-zA-Z0-9_\-./]+$/;
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -21,6 +23,14 @@ export async function POST(req: NextRequest) {
 
     if (!action) {
       return NextResponse.json({ error: "Action is required" }, { status: 400 });
+    }
+
+    if (boardType && !SAFE_PARAM_REGEX.test(boardType)) {
+      return NextResponse.json({ error: "Invalid boardType format" }, { status: 400 });
+    }
+
+    if (devicePath && !SAFE_PARAM_REGEX.test(devicePath)) {
+      return NextResponse.json({ error: "Invalid devicePath format" }, { status: 400 });
     }
 
     let args: string[] = [];
@@ -53,18 +63,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
-    const command = `openFPGALoader ${args.join(" ")}`;
-    
+    const commandStr = `openFPGALoader ${args.join(" ")}`;
+
     return new Promise<Response>((resolve) => {
-      exec(command, { timeout: 15000 }, (error, stdout, stderr) => {
+      execFile("openFPGALoader", args, { timeout: 15000 }, (error, stdout, stderr) => {
         const fullOutput = (stdout || "") + (stderr || "");
-        
-        // Even if there's an error (like openFPGALoader returning non-zero because a board isn't found),
-        // we want to return the output to the user so they can read the CLI message.
-        resolve(NextResponse.json({ 
+
+        resolve(NextResponse.json({
           success: !error,
           output: fullOutput,
-          command
+          command: commandStr,
         }));
       });
     });
@@ -74,3 +82,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+

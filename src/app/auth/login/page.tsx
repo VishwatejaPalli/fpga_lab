@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { AlertTriangleIcon } from "@/components/icons";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -50,7 +51,7 @@ export default function LoginPage() {
 
       <div className="relative z-10 w-full max-w-md animate-float">
         {/* Glass Card */}
-        <div className="bg-white/90 backdrop-blur-xl border border-slate-200 p-8 md:p-10 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.05)] relative overflow-hidden">
+        <div className="bg-white/95 dark:bg-card/95 backdrop-blur-xl border border-slate-200 dark:border-border p-8 md:p-10 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.05)] relative overflow-hidden text-foreground">
           
           <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 pointer-events-none"></div>
 
@@ -62,19 +63,19 @@ export default function LoginPage() {
               <img
                 src="/vce-logo.png"
                 alt="VCE - Vardhaman College of Engineering"
-                className="relative w-24 h-auto mx-auto mb-4 drop-shadow-sm mix-blend-multiply"
+                className="relative w-24 h-auto mx-auto mb-4 drop-shadow-sm mix-blend-multiply dark:mix-blend-normal"
               />
             </div>
-            <h1 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 tracking-wide">
+            <h1 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-purple-500 dark:from-blue-400 dark:to-purple-400 tracking-wide">
               FPGA Remote Lab
             </h1>
             <div className="w-12 h-1 bg-gradient-to-r from-blue-500 to-purple-500 mx-auto mt-4 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.6)]" />
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 rounded-lg px-4 py-3 text-sm mb-6 flex items-center gap-3 backdrop-blur-md">
-              <span className="text-xl">⚠️</span>
-              {error}
+            <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 rounded-lg px-4 py-3 text-sm mb-6 flex items-center gap-3 backdrop-blur-md">
+              <AlertTriangleIcon className="w-5 h-5 shrink-0" />
+              <span>{error}</span>
             </div>
           )}
 
@@ -85,7 +86,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="College Email"
-                className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all placeholder:text-slate-400 shadow-inner"
+                className="w-full bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all placeholder:text-slate-400 shadow-inner"
                 required
               />
             </div>
@@ -96,7 +97,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Password"
-                className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all placeholder:text-slate-400 shadow-inner pr-12"
+                className="w-full bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all placeholder:text-slate-400 shadow-inner pr-12"
                 required
               />
               <button

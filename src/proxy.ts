@@ -121,10 +121,15 @@ export async function proxy(req: NextRequest) {
     "/auth/login",
     "/auth/signup",
     "/auth/verify",
+    "/auth/forgot-password",
+    "/auth/reset-password",
     "/api/auth/signup",
     "/api/auth/login",
     "/api/auth/verify",
     "/api/auth/logout",
+    "/api/auth/forgot-password",
+    "/api/auth/reset-password",
+    "/api/auth/refresh",
   ];
 
   if (publicPaths.includes(pathname)) {
@@ -217,3 +222,6 @@ export const config = {
     "/((?!_next/static|_next/image|favicon.ico).*)",
   ],
 };
+
+export { proxy as middleware };
+export default proxy;

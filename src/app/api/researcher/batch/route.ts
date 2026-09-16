@@ -3,7 +3,6 @@ import { v4 as uuid } from "uuid";
 import { sqlite } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { getRoleConfig } from "@/lib/roles";
-import { runDemoJob } from "@/lib/fpga/demo-runner";
 
 interface BoardRow {
   id: string;
@@ -75,18 +74,12 @@ export async function POST(req: NextRequest) {
     const jobId = uuid();
     jobIds.push(jobId);
 
+    // Enqueue into real hardware job queue
     await sqlite
       .prepare(
         "INSERT INTO jobs (id, user_id, board_id, bitstream_path, bitstream_name, status, batch_id) VALUES (?, ?, ?, ?, ?, 'queued', ?)"
       )
       .run(jobId, session.userId, boardId, bitstreamPath, bitstreamName, batchId);
-
-    // Kick off programming in background
-    if (board.status === "free") {
-      runDemoJob(jobId, boardId, session.userId, bitstreamName).catch((err) => {
-        console.error("[Batch] Programming error:", err);
-      });
-    }
   }
 
   // Update batch progress in background

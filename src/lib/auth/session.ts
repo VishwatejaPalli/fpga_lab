@@ -1,6 +1,6 @@
 import { cookies, headers } from "next/headers";
 import { verifyToken, type JWTPayload } from "./jwt";
-import { sqlite } from "@/lib/db";
+import { rawQuery } from "@/lib/db";
 import { createHash } from "crypto";
 
 interface ApiKeyRow {
@@ -26,7 +26,7 @@ export async function getSession(): Promise<JWTPayload | null> {
   if (token) {
     const payload = verifyToken(token);
     if (payload) {
-      const user = await sqlite
+      const user = await rawQuery
         .prepare("SELECT token_version, status FROM users WHERE id = ?")
         .get(payload.userId) as { token_version: number; status: string } | undefined;
       
@@ -44,7 +44,7 @@ export async function getSession(): Promise<JWTPayload | null> {
       const apiKey = authHeader.substring(7).trim();
       const hash = createHash("sha256").update(apiKey).digest("hex");
 
-      const keyRow = await sqlite
+      const keyRow = await rawQuery
         .prepare("SELECT id, user_id, expires_at FROM api_keys WHERE key_hash = ?")
         .get(hash) as ApiKeyRow | undefined;
 
@@ -56,15 +56,15 @@ export async function getSession(): Promise<JWTPayload | null> {
 
         // Update last_used_at timestamp asynchronously/non-blocking
         try {
-          await sqlite
-            .prepare("UPDATE api_keys SET last_used_at = datetime('now') WHERE id = ?")
+          await rawQuery
+            .prepare("UPDATE api_keys SET last_used_at = NOW()::text WHERE id = ?")
             .run(keyRow.id);
         } catch (e) {
           console.error("[Auth] Failed to update api key last_used_at:", e);
         }
 
         // Fetch user details
-        const userRow = await sqlite
+        const userRow = await rawQuery
           .prepare("SELECT id, email, name, role FROM users WHERE id = ?")
           .get(keyRow.user_id) as UserRow | undefined;
 

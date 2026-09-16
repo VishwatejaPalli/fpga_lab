@@ -14,6 +14,7 @@ export interface SynthResult {
     power: string;
     area: string;
     waveform: string;
+    placement?: any;
   };
   createdAt: string;
   completedAt: string | null;
@@ -55,6 +56,7 @@ export function useSynthesisRunner() {
   const [bramUsage, setBramUsage] = useState<number>(0);
   const [dspUsage, setDspUsage] = useState<number>(0);
   const [schematicSvg, setSchematicSvg] = useState<string>("");
+  const [placementData, setPlacementData] = useState<any>(null);
   const [historyJobs, setHistoryJobs] = useState<any[]>([]);
 
   const synthPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -82,8 +84,20 @@ export function useSynthesisRunner() {
   }, []);
 
   useEffect(() => {
-    fetchHistoryJobs();
-  }, [fetchHistoryJobs]);
+    let isCancelled = false;
+    fetch("/api/history")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!isCancelled && data?.jobs && Array.isArray(data.jobs)) {
+          setHistoryJobs(data.jobs);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
 
   const applySynthesisResults = useCallback(
     (result: SynthResult, projectPart: string, appendTclLogs: (lines: string[]) => void) => {
@@ -118,6 +132,10 @@ export function useSynthesisRunner() {
 
       if (result.reports?.schematic) {
         setSchematicSvg(result.reports.schematic);
+      }
+
+      if (result.reports?.placement) {
+        setPlacementData(result.reports.placement);
       }
 
       if (result.logs) {
@@ -321,6 +339,7 @@ export function useSynthesisRunner() {
     bramUsage,
     dspUsage,
     schematicSvg,
+    placementData,
     historyJobs,
     handleRunSynthesis,
     handleRunImplementation,

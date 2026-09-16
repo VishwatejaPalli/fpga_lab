@@ -48,7 +48,7 @@ export default function SourcesPanel({
                   key={path}
                   onClick={() => selectFile(path)}
                   className={`flex items-center justify-between px-2 py-1 rounded cursor-pointer transition-colors ${
-                    isSelected ? "bg-[#2b579a] text-white font-bold" : "text-slate-800 hover:bg-slate-100"
+                    isSelected ? "bg-[#2b579a] text-white font-bold" : "text-slate-800 hover:bg-slate-200/60"
                   }`}
                 >
                   <div className="flex items-center gap-1.5 truncate">
@@ -92,7 +92,7 @@ export default function SourcesPanel({
                 className={`pl-4 flex items-center justify-between px-2 py-1 rounded cursor-pointer ${
                   selectedFileItem === path
                     ? "bg-[#2b579a] text-white font-bold"
-                    : "text-slate-800 hover:bg-slate-100"
+                    : "text-slate-800 hover:bg-slate-200/60"
                 }`}
               >
                 <div className="flex items-center gap-1.5 truncate">

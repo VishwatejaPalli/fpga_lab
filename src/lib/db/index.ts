@@ -11,8 +11,8 @@ export const pool = new Pool({
 export const db = drizzle(pool, { schema });
 export default db;
 
-// Compatibility adapter for raw SQLite queries to run on PostgreSQL pool
-export const sqlite = {
+// Compatibility adapter for raw parameterized queries to run on PostgreSQL pool
+export const rawQuery = {
   prepare(queryStr: string) {
     let pgQuery = queryStr;
     let index = 1;
@@ -46,13 +46,30 @@ export const sqlite = {
   }
 };
 
+export const sqlite = rawQuery;
+
 // Guarantee initialization runs automatically when database is imported
-if (typeof window === "undefined") {
-  import("../init").then(({ ensureInit }) => {
-    ensureInit();
-  }).catch((err) => {
-    console.error("[DB] Failed to auto-initialize server:", err);
-  });
+if (typeof window === "undefined" && process.env.NEXT_PHASE !== "phase-production-build" && process.env.NODE_ENV !== "test") {
+  try {
+    // In tsx/cjs or Node CommonJS environment, use require for reliable module resolution
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const initModule = typeof require !== "undefined" ? require("../init") : null;
+    const initFn = initModule?.ensureInit || initModule?.initializeServer;
+    if (typeof initFn === "function") {
+      initFn();
+    }
+  } catch {
+    import("../init")
+      .then((initModule) => {
+        const initFn = initModule?.ensureInit || initModule?.initializeServer;
+        if (typeof initFn === "function") {
+          initFn();
+        }
+      })
+      .catch((err) => {
+        console.error("[DB] Failed to auto-initialize server:", err);
+      });
+  }
 }
 
 

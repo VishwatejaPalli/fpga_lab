@@ -1,7 +1,7 @@
 # Stage 1: Build dependency environment
 FROM node:22-alpine AS builder
 WORKDIR /app
-RUN apk add --no-cache libc6-compat python3 make g++ gcc sqlite-dev
+RUN apk add --no-cache libc6-compat python3 make g++ gcc
 COPY package*.json ./
 RUN npm ci
 COPY . .
@@ -16,7 +16,7 @@ ENV PORT=3000
 ENV HOST=0.0.0.0
 
 # Install runtime dependencies
-RUN apk add --no-cache sqlite-dev bash
+RUN apk add --no-cache bash postgresql-client
 
 # Copy build artifacts and dependencies
 COPY --from=builder /app/public ./public

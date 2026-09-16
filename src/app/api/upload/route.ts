@@ -68,7 +68,10 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     const absoluteDir = path.join(process.cwd(), relativeDir);
     fs.mkdirSync(absoluteDir, { recursive: true });
 
-    const safeName = path.basename(file.name).replace(/[^a-zA-Z0-9._-]/g, "_");
+    let safeName = path.basename(file.name).replace(/[^a-zA-Z0-9._-]/g, "_");
+    if (!safeName || safeName === "." || safeName === "..") {
+      safeName = `upload_${fileId}${ext}`;
+    }
     const absoluteFilePath = path.join(absoluteDir, safeName);
     const relativeFilePath = path.join(relativeDir, safeName);
     

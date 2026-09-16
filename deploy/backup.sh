@@ -1,41 +1,51 @@
 #!/bin/bash
 
-# Database Backup Script for FPGA Remote Lab
-# Backs up the SQLite database using safe WAL checkpoints
+# Production PostgreSQL Database Backup Script for FPGA Remote Lab
+# Generates atomic pg_dump archives, compresses with gzip, verifies archive integrity, and cleans up old backups.
 
-DB_FILE="/opt/fpga-lab/data/fpga_lab.db"
-BACKUP_DIR="/opt/fpga-lab/backups"
-RETENTION_DAYS=7
+set -euo pipefail
 
-# Ensure backup directory exists
+BACKUP_DIR="${BACKUP_DIR:-/opt/fpga-lab/backups}"
+RETENTION_DAYS="${RETENTION_DAYS:-7}"
+DATABASE_URL="${DATABASE_URL:-postgresql://postgres:postgres@localhost:5432/fpga_lab}"
+
 mkdir -p "$BACKUP_DIR"
 
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-BACKUP_FILE="$BACKUP_DIR/fpga_lab_backup_$TIMESTAMP.sqlite"
+SQL_FILE="$BACKUP_DIR/fpga_lab_backup_$TIMESTAMP.sql"
+ARCHIVE_FILE="${SQL_FILE}.gz"
 
-echo "[$(date)] Starting database backup..."
+echo "[$(date)] Starting PostgreSQL database backup..."
 
-if [ ! -f "$DB_FILE" ]; then
-    echo "Error: Database file not found at $DB_FILE"
-    exit 1
-fi
-
-# Run SQLite WAL checkpoint and backup command
-# This ensures all pending WAL changes are flushed and backed up atomically
-sqlite3 "$DB_FILE" "PRAGMA wal_checkpoint(TRUNCATE);"
-sqlite3 "$DB_FILE" ".backup '$BACKUP_FILE'"
-
-if [ $? -eq 0 ]; then
-    # Compress backup file
-    gzip "$BACKUP_FILE"
-    echo "[$(date)] Backup completed and compressed: ${BACKUP_FILE}.gz"
+# Dump PostgreSQL database using connection URL or container parameters
+if command -v pg_dump &>/dev/null; then
+    pg_dump "$DATABASE_URL" > "$SQL_FILE"
+elif command -v docker &>/dev/null && docker ps | grep -q fpga_lab_db; then
+    docker exec fpga_lab_db pg_dump -U postgres fpga_lab > "$SQL_FILE"
 else
-    echo "Error: SQLite backup failed"
+    echo "Error: Neither pg_dump nor docker container fpga_lab_db found" >&2
     exit 1
 fi
 
-# Retention cleanup: Delete backups older than retention period
-echo "[$(date)] Cleaning up backups older than $RETENTION_DAYS days..."
-find "$BACKUP_DIR" -name "fpga_lab_backup_*.sqlite.gz" -type f -mtime +$RETENTION_DAYS -delete
+if [ -s "$SQL_FILE" ]; then
+    gzip "$SQL_FILE"
+    echo "[$(date)] Database compressed successfully: $ARCHIVE_FILE"
 
-echo "[$(date)] Backup process finished successfully"
+    # Verify archive integrity
+    if gzip -t "$ARCHIVE_FILE"; then
+        echo "[$(date)] Backup archive integrity verified (gzip test passed)."
+    else
+        echo "Error: Backup archive corruption detected during verification test!" >&2
+        exit 1
+    fi
+else
+    echo "Error: PostgreSQL dump produced empty output file." >&2
+    rm -f "$SQL_FILE"
+    exit 1
+fi
+
+# Retention cleanup
+echo "[$(date)] Cleaning up backups older than $RETENTION_DAYS days..."
+find "$BACKUP_DIR" -name "fpga_lab_backup_*.sql.gz" -type f -mtime +$RETENTION_DAYS -delete
+
+echo "[$(date)] PostgreSQL backup completed successfully: $ARCHIVE_FILE"

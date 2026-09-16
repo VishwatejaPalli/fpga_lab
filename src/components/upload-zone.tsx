@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { FileTextIcon, FolderIcon, AlertTriangleIcon } from "@/components/icons";
 
 interface UploadZoneProps {
   onFileSelected: (file: File) => void;
@@ -42,10 +43,10 @@ export default function UploadZone({ onFileSelected, disabled }: UploadZoneProps
 
   return (
     <div
-      className={`border-2 border-dashed rounded-xl p-6 sm:p-8 text-center transition-colors touch-manipulation ${
+      className={`border-2 border-dashed rounded-xl p-6 sm:p-8 text-center transition-all touch-manipulation ${
         dragOver
-          ? "border-primary bg-primary/5"
-          : "border-border hover:border-muted"
+          ? "border-primary bg-primary/10 shadow-[0_0_20px_rgba(59,130,246,0.2)]"
+          : "border-border hover:border-primary/50 bg-card/50 hover:bg-card"
       } ${disabled ? "opacity-50 pointer-events-none" : "cursor-pointer"}`}
       onDragOver={(e) => {
         e.preventDefault();
@@ -71,24 +72,31 @@ export default function UploadZone({ onFileSelected, disabled }: UploadZoneProps
     >
       {fileName ? (
         <>
-          <div className="text-3xl mb-2">📄</div>
-          <p className="font-medium">{fileName}</p>
-          <p className="text-muted text-sm mt-1">Click or drag to replace</p>
+          <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-3 text-primary">
+            <FileTextIcon className="w-6 h-6" />
+          </div>
+          <p className="font-medium text-foreground font-mono">{fileName}</p>
+          <p className="text-muted text-xs font-mono mt-1">Click or drag to replace bitstream</p>
         </>
       ) : (
         <>
-          <div className="text-3xl mb-2">📂</div>
-          <p className="font-medium">
-            Drag & drop your bitstream file here
+          <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-3 text-primary">
+            <FolderIcon className="w-6 h-6" />
+          </div>
+          <p className="font-medium text-foreground text-sm">
+            Drag &amp; drop your compiled gateware bitstream file here
           </p>
-          <p className="text-muted text-sm mt-1">
+          <p className="text-muted text-xs font-mono mt-1.5">
             Or click to browse. Supports: {ALLOWED_EXTENSIONS.join(", ")}
           </p>
         </>
       )}
 
       {error && (
-        <p className="text-danger text-sm mt-3">{error}</p>
+        <div className="inline-flex items-center gap-1.5 text-rose-500 text-xs font-mono mt-3">
+          <AlertTriangleIcon className="w-3.5 h-3.5" />
+          <span>{error}</span>
+        </div>
       )}
     </div>
   );

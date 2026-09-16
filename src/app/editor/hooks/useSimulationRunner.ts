@@ -27,8 +27,8 @@ export function useSimulationRunner() {
           body: JSON.stringify({ files }),
         });
         const data = await res.json();
-        if (res.ok && data.waveform) {
-          setWaves(data.waveform);
+        if (res.ok && (data.waves || data.waveform)) {
+          setWaves(data.waves || data.waveform);
           appendTclLogs(["INFO: Simulation completed. Waveform generated."]);
           openTab("view:waveform", "Behavioral Waveform", "view");
         } else {

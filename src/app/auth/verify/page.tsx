@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Suspense } from "react";
+import { RefreshCwIcon, CheckCircleSolidIcon, XCircleSolidIcon } from "@/components/icons";
 
 function VerifyContent() {
   const searchParams = useSearchParams();
@@ -44,7 +45,9 @@ function VerifyContent() {
         <div className="card">
           {status === "loading" && (
             <>
-              <div className="text-5xl mb-4 animate-pulse">⏳</div>
+              <div className="flex justify-center mb-4">
+                <RefreshCwIcon className="w-12 h-12 text-primary animate-spin" />
+              </div>
               <h1 className="text-2xl font-bold mb-2">Verifying...</h1>
               <p className="text-muted">Please wait while we verify your email.</p>
             </>
@@ -52,7 +55,9 @@ function VerifyContent() {
 
           {status === "success" && (
             <>
-              <div className="text-5xl mb-4">✅</div>
+              <div className="flex justify-center mb-4">
+                <CheckCircleSolidIcon className="w-14 h-14 text-emerald-500 shadow-sm" />
+              </div>
               <h1 className="text-2xl font-bold mb-2">Email Verified!</h1>
               <p className="text-muted mb-6">{message}</p>
               <Link href="/auth/login" className="btn-primary inline-block">
@@ -63,7 +68,9 @@ function VerifyContent() {
 
           {status === "error" && (
             <>
-              <div className="text-5xl mb-4">❌</div>
+              <div className="flex justify-center mb-4">
+                <XCircleSolidIcon className="w-14 h-14 text-rose-500 shadow-sm" />
+              </div>
               <h1 className="text-2xl font-bold mb-2">Verification Failed</h1>
               <p className="text-muted mb-6">{message}</p>
               <Link href="/auth/signup" className="btn-primary inline-block">

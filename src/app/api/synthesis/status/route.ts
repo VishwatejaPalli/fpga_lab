@@ -48,6 +48,16 @@ export async function GET(req: NextRequest) {
     }
   } catch (err) {}
 
+  let placement = null;
+  if (job.areaReport && job.areaReport.includes("JSON_PLACEMENT_DATA:")) {
+    try {
+      const parts = job.areaReport.split("JSON_PLACEMENT_DATA:");
+      if (parts[1]) {
+        placement = JSON.parse(parts[1].trim());
+      }
+    } catch (e) {}
+  }
+
   return NextResponse.json({
     success: true,
     jobId: job.id,
@@ -61,6 +71,7 @@ export async function GET(req: NextRequest) {
       power: job.powerReport,
       area: job.areaReport,
       waveform: job.waveformData,
+      placement,
     },
     createdAt: job.createdAt,
     completedAt: job.completedAt,

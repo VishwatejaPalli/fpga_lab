@@ -32,7 +32,7 @@ export async function GET() {
     
     // Fetch detailed boards list
     const boardList = await sqlite
-      .prepare("SELECT id, name, board_type, fpga_family, status, connection_type FROM boards")
+      .prepare("SELECT id, name, board_type, fpga_family, status, connection_type, mac_address, hostname, ip_address, connection_status, last_seen, last_error FROM boards")
       .all() as any[];
       
     const formattedBoards = boardList.map((b) => ({
@@ -41,7 +41,13 @@ export async function GET() {
       boardType: b.board_type,
       fpgaFamily: b.fpga_family,
       status: b.status,
-      connectionType: b.connection_type
+      connectionType: b.connection_type,
+      macAddress: b.mac_address,
+      hostname: b.hostname,
+      ipAddress: b.ip_address,
+      connectionStatus: b.connection_status || "ONLINE",
+      lastSeen: b.last_seen,
+      lastError: b.last_error,
     }));
 
     // Fetch detailed recent jobs list

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { MailIcon, GraduationCapIcon, FlaskIcon } from "@/components/icons";
 
 export default function SignupPage() {
   const [name, setName] = useState("");
@@ -10,8 +11,8 @@ export default function SignupPage() {
   const [role, setRole] = useState<"student" | "researcher">("student");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -48,7 +49,9 @@ export default function SignupPage() {
         <div className="auth-slideshow" />
         <div className="relative z-10 w-full max-w-md">
           <div className="card p-8 md:p-10 text-center">
-            <div className="text-5xl mb-4">📧</div>
+            <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4 text-primary">
+              <MailIcon className="w-8 h-8" />
+            </div>
             <h1 className="text-2xl font-bold text-foreground mb-2">Check your email</h1>
             <p className="text-muted mb-6">
               We sent a verification link to <strong className="text-foreground">{email}</strong>. Click the
@@ -68,14 +71,14 @@ export default function SignupPage() {
       {/* Animated sliding background */}
       <div className="auth-slideshow" />
       <div className="relative z-10 w-full max-w-md">
-        <div className="bg-white/90 backdrop-blur-xl border border-slate-200 p-8 md:p-10 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.05)] relative overflow-hidden">
+        <div className="bg-white/95 dark:bg-card/95 backdrop-blur-xl border border-slate-200 dark:border-border p-8 md:p-10 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.05)] relative overflow-hidden text-foreground">
           {/* Logo & branding */}
           <div className="text-center mb-8">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/vce-logo.png"
               alt="VCE - Vardhaman College of Engineering"
-              className="relative w-24 h-auto mx-auto mb-4 drop-shadow-sm mix-blend-multiply"
+              className="relative w-24 h-auto mx-auto mb-4 drop-shadow-sm mix-blend-multiply dark:mix-blend-normal"
             />
             <h1 className="text-xl font-bold text-primary tracking-wide">
               FPGA Remote Lab
@@ -88,7 +91,7 @@ export default function SignupPage() {
           </h2>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 rounded-lg px-4 py-3 text-sm mb-4">
+            <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 rounded-lg px-4 py-3 text-sm mb-4">
               {error}
             </div>
           )}
@@ -104,13 +107,13 @@ export default function SignupPage() {
                   type="button"
                   onClick={() => setRole("student")}
                   aria-pressed={role === "student"}
-                  className={`p-3 rounded-xl border-2 text-center transition-all ${
+                  className={`p-3 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center ${
                     role === "student"
                       ? "border-primary bg-primary/10 text-primary shadow-sm"
-                      : "border-border bg-slate-900/40 dark:bg-slate-900/60 text-muted hover:border-foreground hover:text-foreground"
+                      : "border-border bg-slate-100 dark:bg-slate-900/60 text-muted hover:border-foreground hover:text-foreground"
                   }`}
                 >
-                  <div className="text-lg mb-0.5">🎓</div>
+                  <GraduationCapIcon className="w-6 h-6 mb-1 text-current" />
                   <div className="text-sm font-semibold">Student</div>
                   <div className="text-xs opacity-70 mt-0.5">Course labs &amp; assignments</div>
                 </button>
@@ -118,13 +121,13 @@ export default function SignupPage() {
                   type="button"
                   onClick={() => setRole("researcher")}
                   aria-pressed={role === "researcher"}
-                  className={`p-3 rounded-xl border-2 text-center transition-all ${
+                  className={`p-3 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center ${
                     role === "researcher"
                       ? "border-primary bg-primary/10 text-primary shadow-sm"
-                      : "border-border bg-slate-900/40 dark:bg-slate-900/60 text-muted hover:border-foreground hover:text-foreground"
+                      : "border-border bg-slate-100 dark:bg-slate-900/60 text-muted hover:border-foreground hover:text-foreground"
                   }`}
                 >
-                  <div className="text-lg mb-0.5">🔬</div>
+                  <FlaskIcon className="w-6 h-6 mb-1 text-current" />
                   <div className="text-sm font-semibold">Researcher</div>
                   <div className="text-xs opacity-70 mt-0.5">Extended sessions &amp; priority</div>
                 </button>
@@ -137,7 +140,7 @@ export default function SignupPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Full Name"
-                className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all placeholder:text-slate-400 shadow-inner"
+                className="w-full bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all placeholder:text-slate-400 shadow-inner"
                 required
               />
             </div>
@@ -148,7 +151,7 @@ export default function SignupPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="College Email (vardhaman.org)"
-                className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all placeholder:text-slate-400 shadow-inner"
+                className="w-full bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all placeholder:text-slate-400 shadow-inner"
                 required
               />
             </div>
@@ -159,7 +162,7 @@ export default function SignupPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Password (min 8 characters)"
-                className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all placeholder:text-slate-400 shadow-inner pr-12"
+                className="w-full bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all placeholder:text-slate-400 shadow-inner pr-12"
                 minLength={8}
                 required
               />

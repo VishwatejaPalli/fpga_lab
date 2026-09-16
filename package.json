@@ -9,14 +9,14 @@
     "start": "NODE_ENV=production node server.js",
     "seed-admin": "npx tsx scripts/seed-admin.ts",
     "seed-demo": "npx tsx scripts/seed-demo.ts",
-    "lint": "next lint"
+    "test": "vitest run",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
     "@xterm/addon-fit": "0.11.0",
     "@xterm/xterm": "6.0.0",
     "bcryptjs": "3.0.3",
-    "better-sqlite3": "12.6.2",
     "drizzle-orm": "^0.31.4",
     "jsonwebtoken": "9.0.3",
     "next": "16.1.6",
@@ -34,7 +34,6 @@
   "devDependencies": {
     "@tailwindcss/postcss": "4.2.1",
     "@types/bcryptjs": "2.4.6",
-    "@types/better-sqlite3": "7.6.13",
     "@types/jsonwebtoken": "9.0.10",
     "@types/node": "20.19.35",
     "@types/nodemailer": "7.0.11",
@@ -50,6 +49,7 @@
     "eslint-config-next": "16.1.6",
     "tailwindcss": "4.2.1",
     "tsx": "4.22.4",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "^3.0.5"
   }
 }

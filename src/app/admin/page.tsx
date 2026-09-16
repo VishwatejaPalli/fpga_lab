@@ -3,50 +3,200 @@
 import { useEffect, useState } from "react";
 import Navbar from "@/components/navbar";
 import ConfirmModal from "@/components/confirm-modal";
-import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 
-const fpgaUsageData = [
-  { day: 'Mon', sessions: 12 },
-  { day: 'Tue', sessions: 18 },
-  { day: 'Wed', sessions: 24 },
-  { day: 'Thu', sessions: 17 },
-  { day: 'Fri', sessions: 29 },
-  { day: 'Sat', sessions: 14 },
-  { day: 'Sun', sessions: 9 },
-];
+// ── Precision SVG Icons (No Emojis) ───────────────────────────────────────
+function CpuIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <rect x="9" y="9" width="6" height="6" />
+      <path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3" />
+    </svg>
+  );
+}
 
-const boardUtilizationData = [
-  { board: 'PYNQ-1', runs: 130 },
-  { board: 'PYNQ-2', runs: 85 },
-  { board: 'Basys3', runs: 52 },
-  { board: 'Artix7', runs: 34 },
-];
+function CameraIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+      <circle cx="12" cy="13" r="4" />
+    </svg>
+  );
+}
 
-const userActivityData = [
-  { time: '00:00', active: 2 },
-  { time: '04:00', active: 5 },
-  { time: '08:00', active: 15 },
-  { time: '12:00', active: 45 },
-  { time: '16:00', active: 38 },
-  { time: '20:00', active: 20 },
-];
+function TerminalIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="4 17 10 11 4 5" />
+      <line x1="12" y1="19" x2="20" y2="19" />
+    </svg>
+  );
+}
 
-const sessionDurationData = [
-  { duration: '< 10m', count: 45 },
-  { duration: '10-30m', count: 120 },
-  { duration: '30-60m', count: 85 },
-  { duration: '1-2h', count: 32 },
-  { duration: '> 2h', count: 12 },
-];
+function ShieldCheckIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  );
+}
 
-const reservationStatsData = [
-  { status: 'Completed', count: 150 },
-  { status: 'Upcoming', count: 42 },
-  { status: 'Cancelled', count: 18 },
-];
+function RefreshCwIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+      <path d="M21 3v5h-5" />
+      <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+      <path d="M8 16H3v5" />
+    </svg>
+  );
+}
 
-const COLORS = ['#10b981', '#3b82f6', '#ef4444'];
+function ZapIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+    </svg>
+  );
+}
 
+function PlusIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  );
+}
+
+function SearchIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  );
+}
+
+function Trash2Icon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    </svg>
+  );
+}
+
+function Edit3Icon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+    </svg>
+  );
+}
+
+function BarChart3Icon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="20" x2="18" y2="10" />
+      <line x1="12" y1="20" x2="12" y2="4" />
+      <line x1="6" y1="20" x2="6" y2="14" />
+    </svg>
+  );
+}
+
+function UsersIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function AlertCircleIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
+    </svg>
+  );
+}
+
+function CheckIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+function FilterIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+    </svg>
+  );
+}
+
+function XIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
+function SlidersHorizontalIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="21" y1="4" x2="14" y2="4" />
+      <line x1="10" y1="4" x2="3" y2="4" />
+      <line x1="21" y1="12" x2="12" y2="12" />
+      <line x1="8" y1="12" x2="3" y2="12" />
+      <line x1="21" y1="20" x2="16" y2="20" />
+      <line x1="12" y1="20" x2="3" y2="20" />
+      <line x1="14" y1="2" x2="14" y2="6" />
+      <line x1="8" y1="10" x2="8" y2="14" />
+      <line x1="16" y1="18" x2="16" y2="22" />
+    </svg>
+  );
+}
+
+interface AnalyticsData {
+  fpgaUsageData: { day: string; sessions: number }[];
+  boardUtilizationData: { board: string; runs: number }[];
+  userActivityData: { time: string; active: number }[];
+  sessionDurationData: { duration: string; count: number }[];
+  reservationStatsData: { status: string; count: number }[];
+}
+
+const CHART_COLORS = ["#10b981", "#3b82f6", "#ef4444"];
+
+// ── Type Definitions ─────────────────────────────────────────────────────
 interface Board {
   id: string;
   name: string;
@@ -57,6 +207,12 @@ interface Board {
   ipAddress: string | null;
   serialPort: string | null;
   cameraDevice: string | null;
+  cameraDeviceId?: string | null;
+  uartDeviceId?: string | null;
+  jtagDeviceId?: string | null;
+  mappingStatus?: "UNMAPPED" | "PENDING_VERIFICATION" | "VERIFIED" | "DEGRADED" | "NEEDS_REVALIDATION";
+  mappingVerifiedAt?: string | null;
+  hardwareFingerprint?: string | null;
   boardImageUrl: string | null;
   blankBitstreamPath: string | null;
   programmingTool: string | null;
@@ -65,6 +221,39 @@ interface Board {
   status: string;
   capabilities: string[];
   sessionTimeoutMinutes: number;
+}
+
+interface DetectedCamera {
+  id: string;
+  deviceNode: string;
+  preferredPath: string;
+  byId: string | null;
+  byPath: string | null;
+  isPersistent: boolean;
+  model: string;
+  manufacturer?: string;
+  serialNumber?: string;
+  usbBus?: string;
+  usbPort?: string;
+  status: string;
+  assignedBoardId?: string | null;
+  previewUrl: string;
+}
+
+interface DetectedUart {
+  id: string;
+  deviceNode: string;
+  preferredPath: string;
+  byId: string | null;
+  byPath: string | null;
+  isPersistent: boolean;
+  model: string;
+  manufacturer?: string;
+  serialNumber?: string;
+  usbBus?: string;
+  usbPort?: string;
+  status: string;
+  assignedBoardId?: string | null;
 }
 
 interface User {
@@ -77,13 +266,14 @@ interface User {
 }
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<"analytics" | "boards" | "users" | "add-board">("analytics");
+  const [tab, setTab] = useState<"boards" | "hardware" | "add-board" | "analytics" | "users">("boards");
   const [boards, setBoards] = useState<Board[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [updatingRole, setUpdatingRole] = useState<string | null>(null);
   const [editingBoardId, setEditingBoardId] = useState<string | null>(null);
+  const [verifyingBoardId, setVerifyingBoardId] = useState<string | null>(null);
   const [showCreateUser, setShowCreateUser] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createEmail, setCreateEmail] = useState("");
@@ -91,6 +281,23 @@ export default function AdminPage() {
   const [createRole, setCreateRole] = useState<"guest" | "student" | "researcher" | "admin">("student");
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState("");
+
+  // Analytics Live State
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+
+  // Fleet Search & Filter state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [mappingFilter, setMappingFilter] = useState<string>("all");
+  const [familyFilter, setFamilyFilter] = useState<string>("all");
+
+  // Camera & UART testing state
+  const [cameraTimestamps, setCameraTimestamps] = useState<Record<string, number>>({});
+  const [testingUart, setTestingUart] = useState<Record<string, boolean>>({});
+  const [uartTestResults, setUartTestResults] = useState<
+    Record<string, { success: boolean; message: string; latencyMs?: number; inUse?: boolean }>
+  >({});
 
   // Board form state
   const emptyBoardForm = {
@@ -102,6 +309,10 @@ export default function AdminPage() {
     ipAddress: "",
     serialPort: "",
     cameraDevice: "",
+    cameraDeviceId: "",
+    uartDeviceId: "",
+    jtagDeviceId: "",
+    mappingStatus: "UNMAPPED",
     boardImageUrl: "",
     blankBitstreamPath: "",
     programmingTool: "openFPGALoader",
@@ -113,7 +324,12 @@ export default function AdminPage() {
 
   const [boardForm, setBoardForm] = useState(emptyBoardForm);
   const [detecting, setDetecting] = useState(false);
-  const [detectedDevices, setDetectedDevices] = useState<{ hardware: any[]; serialPorts: string[]; cameras: string[]; rawOutput?: string } | null>(null);
+  const [detectedDevices, setDetectedDevices] = useState<{
+    hardware: any[];
+    serialPorts: DetectedUart[];
+    cameras: DetectedCamera[];
+    rawOutput?: string;
+  } | null>(null);
 
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -129,37 +345,160 @@ export default function AdminPage() {
     onConfirm: () => {},
   });
 
+  const fetchAnalytics = async () => {
+    setLoadingAnalytics(true);
+    try {
+      const res = await fetch("/api/admin/analytics");
+      if (res.ok) {
+        const data = await res.json();
+        setAnalyticsData(data);
+      }
+    } catch (err) {
+      console.error("Failed to load analytics:", err);
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  };
+
   useEffect(() => {
     fetchData();
+    handleDetect();
+    fetchAnalytics();
   }, []);
 
   async function handleDetect() {
     setDetecting(true);
-    setDetectedDevices(null);
     try {
       const res = await fetch("/api/admin/boards/detect");
       const data = await res.json();
       if (res.ok) {
         setDetectedDevices(data);
       } else {
-        setMessage(`Error: ${data.error || "Detection failed"}`);
+        setMessage(`Error: ${data.error || "Hardware detection failed"}`);
       }
     } catch {
-      setMessage("Error: Network error during detection");
+      setMessage("Error: Network error during hardware detection");
     } finally {
       setDetecting(false);
     }
   }
 
+  function handleRefreshCamera(camId: string) {
+    setCameraTimestamps((prev) => ({ ...prev, [camId]: Date.now() }));
+  }
+
+  async function handleTestUart(uartId: string) {
+    setTestingUart((prev) => ({ ...prev, [uartId]: true }));
+    try {
+      const res = await fetch(`/api/admin/hardware/uart/${uartId}/test`, { method: "POST" });
+      const data = await res.json();
+      setUartTestResults((prev) => ({
+        ...prev,
+        [uartId]: {
+          success: data.success,
+          message: data.message || data.error || (data.success ? "Test passed" : "Test failed"),
+          latencyMs: data.latencyMs,
+          inUse: data.inUse,
+        },
+      }));
+    } catch {
+      setUartTestResults((prev) => ({
+        ...prev,
+        [uartId]: {
+          success: false,
+          message: "Network error during UART test",
+        },
+      }));
+    } finally {
+      setTestingUart((prev) => ({ ...prev, [uartId]: false }));
+    }
+  }
+
+  async function handleVerifyBoard(boardId: string) {
+    setVerifyingBoardId(boardId);
+    try {
+      const res = await fetch(`/api/admin/boards/${boardId}/verify`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage(data.message || "Hardware mapping verified successfully.");
+        fetchData();
+      } else {
+        setMessage(`Error: ${data.error || "Verification failed"}`);
+      }
+    } catch {
+      setMessage("Error: Failed to verify board hardware mapping");
+    } finally {
+      setVerifyingBoardId(null);
+    }
+  }
+
+  async function handleQuickAssignHardware(
+    deviceId: string,
+    deviceType: "camera" | "uart",
+    boardId: string,
+    preferredPath: string
+  ) {
+    if (!boardId) return;
+    try {
+      const payload =
+        deviceType === "camera"
+          ? { id: boardId, cameraDeviceId: deviceId, cameraDevice: preferredPath }
+          : { id: boardId, uartDeviceId: deviceId, serialPort: preferredPath };
+
+      const res = await fetch("/api/admin/boards", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage(`Assigned ${deviceType} to board successfully.`);
+        fetchData();
+        handleDetect();
+      } else {
+        setMessage(`Error: ${data.error || "Failed to assign device"}`);
+      }
+    } catch {
+      setMessage("Error assigning hardware device to board");
+    }
+  }
+
+  function handleCreateBoardWithHardware(opts: {
+    name?: string;
+    fpgaFamily?: string;
+    boardType?: string;
+    capabilities?: string[];
+    cameraDeviceId?: string;
+    cameraDevice?: string;
+    uartDeviceId?: string;
+    serialPort?: string;
+    devicePath?: string;
+  }) {
+    setEditingBoardId(null);
+    setBoardForm({
+      ...emptyBoardForm,
+      name: opts.name || "",
+      fpgaFamily: opts.fpgaFamily || "",
+      boardType: opts.boardType || "",
+      capabilities: opts.capabilities || [],
+      cameraDeviceId: opts.cameraDeviceId || "",
+      cameraDevice: opts.cameraDevice || "",
+      uartDeviceId: opts.uartDeviceId || "",
+      serialPort: opts.serialPort || "",
+      devicePath: opts.devicePath || "",
+    });
+    setTab("add-board");
+  }
+
   function applyTemplate(item: any) {
     if (!item.template) return;
-    setBoardForm((prev) => ({
-      ...prev,
+    handleCreateBoardWithHardware({
       name: `${item.template.name} (${item.idcode})`,
       fpgaFamily: item.template.fpgaFamily,
       boardType: item.template.boardType,
       capabilities: item.template.capabilities,
-    }));
+      devicePath: item.path || "",
+    });
   }
 
   async function fetchData() {
@@ -198,6 +537,10 @@ export default function AdminPage() {
       ipAddress: board.ipAddress || "",
       serialPort: board.serialPort || "",
       cameraDevice: board.cameraDevice || "",
+      cameraDeviceId: board.cameraDeviceId || "",
+      uartDeviceId: board.uartDeviceId || "",
+      jtagDeviceId: board.jtagDeviceId || "",
+      mappingStatus: board.mappingStatus || "UNMAPPED",
       boardImageUrl: board.boardImageUrl || "",
       blankBitstreamPath: board.blankBitstreamPath || "",
       programmingTool: board.programmingTool || "openFPGALoader",
@@ -224,6 +567,10 @@ export default function AdminPage() {
           ipAddress: boardForm.ipAddress || undefined,
           serialPort: boardForm.serialPort || undefined,
           cameraDevice: boardForm.cameraDevice || undefined,
+          cameraDeviceId: boardForm.cameraDeviceId || undefined,
+          uartDeviceId: boardForm.uartDeviceId || undefined,
+          jtagDeviceId: boardForm.jtagDeviceId || undefined,
+          mappingStatus: boardForm.mappingStatus || undefined,
           boardImageUrl: boardForm.boardImageUrl || undefined,
           blankBitstreamPath: boardForm.blankBitstreamPath || undefined,
         }),
@@ -232,9 +579,7 @@ export default function AdminPage() {
       const data = await res.json();
 
       if (res.ok) {
-        setMessage(
-          editingBoardId ? "Board updated successfully!" : "Board added successfully!"
-        );
+        setMessage(editingBoardId ? "Board updated successfully." : "Board created successfully.");
         resetBoardForm();
         fetchData();
         setTab("boards");
@@ -250,7 +595,7 @@ export default function AdminPage() {
     setConfirmModal({
       isOpen: true,
       title: "Delete Board",
-      message: `Are you sure you want to delete board "${boardName || id}"? This action cannot be undone.`,
+      message: `Delete board "${boardName || id}"? This action cannot be undone.`,
       confirmText: "Delete Board",
       variant: "danger",
       onConfirm: async () => {
@@ -262,7 +607,7 @@ export default function AdminPage() {
             body: JSON.stringify({ id }),
           });
           if (res.ok) {
-            setMessage("Board deleted successfully!");
+            setMessage("Board deleted.");
             fetchData();
           } else {
             const data = await res.json();
@@ -301,7 +646,7 @@ export default function AdminPage() {
     setConfirmModal({
       isOpen: true,
       title: "Delete User",
-      message: `Are you sure you want to delete user "${userName || userId}"? This action cannot be undone.`,
+      message: `Delete user "${userName || userId}"?`,
       confirmText: "Delete User",
       variant: "danger",
       onConfirm: async () => {
@@ -312,7 +657,7 @@ export default function AdminPage() {
             method: "DELETE",
           });
           if (res.ok) {
-            setMessage("User deleted successfully!");
+            setMessage("User deleted.");
             fetchData();
           } else {
             const data = await res.json();
@@ -337,10 +682,16 @@ export default function AdminPage() {
   }
 
   const tabs = [
-    { id: "analytics" as const, label: "Analytics" },
-    { id: "boards" as const, label: "Boards" },
-    { id: "users" as const, label: "Users" },
-    { id: "add-board" as const, label: "+ Add Board" },
+    { id: "boards" as const, label: "Boards", icon: CpuIcon, count: boards.length },
+    {
+      id: "hardware" as const,
+      label: "Hardware Studio",
+      icon: TerminalIcon,
+      count: (detectedDevices?.cameras.length || 0) + (detectedDevices?.serialPorts.length || 0),
+    },
+    { id: "add-board" as const, label: editingBoardId ? "Edit Board" : "Add Board", icon: PlusIcon },
+    { id: "analytics" as const, label: "Analytics", icon: BarChart3Icon },
+    { id: "users" as const, label: "Users", icon: UsersIcon, count: users.length },
   ];
 
   const boardCounts = boards.reduce(
@@ -349,246 +700,270 @@ export default function AdminPage() {
       if (board.status === "free") acc.free += 1;
       if (board.status === "busy") acc.busy += 1;
       if (board.status === "offline") acc.offline += 1;
-      if (board.blankBitstreamPath) acc.blankConfigured += 1;
+      if (board.mappingStatus === "VERIFIED") acc.verified += 1;
       return acc;
     },
-    { total: 0, free: 0, busy: 0, offline: 0, blankConfigured: 0 }
+    { total: 0, free: 0, busy: 0, offline: 0, verified: 0 }
   );
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen pb-16 bg-background bg-grid-cockpit text-foreground transition-colors">
       <Navbar />
 
-      <main className="max-w-6xl mx-auto px-6 py-8">
-        <h1 className="text-3xl font-bold mb-2">Admin Panel</h1>
-        <p className="text-muted mb-8">Manage boards, users, and system settings</p>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Minimal Industrial Header */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6 pb-6 border-b border-border">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-mono font-bold tracking-widest text-primary uppercase">ADMIN COCKPIT</span>
+              <span className="text-xs text-muted font-mono">•</span>
+              <span className="text-xs font-mono text-muted">HARDWARE CONTROLLER v2.4</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">Hardware &amp; Fleet Management</h1>
+          </div>
 
-        {/* Tabs */}
-        <div className="flex items-center gap-1 mb-8 border-b border-border">
-          {tabs.map((t) => (
+          <div className="flex items-center gap-2">
             <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                tab === t.id
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted hover:text-foreground"
-              }`}
+              type="button"
+              onClick={handleDetect}
+              disabled={detecting}
+              className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-mono font-semibold rounded-xl bg-primary text-white hover:bg-primary-hover transition-all shadow-lg shadow-primary/25 disabled:opacity-50"
             >
-              {t.label}
+              <SearchIcon className={`w-3.5 h-3.5 ${detecting ? "animate-spin" : ""}`} />
+              <span>{detecting ? "Scanning Bus..." : "Scan Hardware"}</span>
             </button>
-          ))}
+            <button
+              type="button"
+              onClick={() => {
+                resetBoardForm();
+                setTab("add-board");
+              }}
+              className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-mono font-semibold rounded-xl bg-card border border-border hover:bg-muted text-foreground transition-all"
+            >
+              <PlusIcon className="w-3.5 h-3.5" />
+              <span>Add Board</span>
+            </button>
+          </div>
         </div>
 
+        {/* Global Notification Banner */}
         {message && (
           <div
-            className={`rounded-lg px-4 py-3 text-sm mb-6 ${
+            className={`rounded-xl px-4 py-3 text-xs font-mono font-medium mb-6 flex items-center justify-between border ${
               message.startsWith("Error")
-                ? "bg-danger/10 text-danger"
-                : "bg-success/10 text-success"
+                ? "bg-rose-500/15 text-rose-600 dark:text-rose-300 border-rose-500/30"
+                : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-500/30"
             }`}
           >
-            {message}
+            <div className="flex items-center gap-2">
+              {message.startsWith("Error") ? (
+                <AlertCircleIcon className="w-4 h-4 shrink-0 text-rose-500" />
+              ) : (
+                <CheckIcon className="w-4 h-4 shrink-0 text-emerald-500" />
+              )}
+              <span>{message}</span>
+            </div>
+            <button onClick={() => setMessage("")} className="text-xs opacity-60 hover:opacity-100">
+              <XIcon className="w-4 h-4" />
+            </button>
           </div>
         )}
 
-        {/* Analytics tab */}
-        {tab === "analytics" && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* 1. FPGA Usage Trend */}
-              <div className="card">
-                <h3 className="font-semibold mb-4 text-sm">FPGA Usage Trend</h3>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={fpgaUsageData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                      <XAxis dataKey="day" fontSize={12} />
-                      <YAxis fontSize={12} />
-                      <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
-                      <Line type="monotone" dataKey="sessions" stroke="#8b5cf6" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
+        {/* Minimal Segmented Tabs */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-px mb-6 border-b border-border no-scrollbar">
+          {tabs.map((t) => {
+            const Icon = t.icon;
+            const isActive = tab === t.id;
 
-              {/* 2. Board Utilization */}
-              <div className="card">
-                <h3 className="font-semibold mb-4 text-sm">Board Utilization</h3>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={boardUtilizationData} layout="vertical" margin={{ left: 20 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" horizontal={true} vertical={false} />
-                      <XAxis type="number" fontSize={12} />
-                      <YAxis dataKey="board" type="category" fontSize={12} width={60} />
-                      <Tooltip cursor={{ fill: '#f3e8ff' }} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
-                      <Bar dataKey="runs" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
+            return (
+              <button
+                key={t.id}
+                onClick={() => {
+                  if (t.id === "add-board" && tab !== "add-board") {
+                    resetBoardForm();
+                  }
+                  setTab(t.id);
+                }}
+                className={`inline-flex items-center gap-2 px-4 py-2.5 text-xs font-mono font-medium border-b-2 transition-all whitespace-nowrap ${
+                  isActive
+                    ? "border-primary text-primary font-semibold"
+                    : "border-transparent text-muted hover:text-foreground hover:border-border"
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{t.label}</span>
+                {typeof t.count === "number" && (
+                  <span
+                    className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${
+                      isActive
+                        ? "bg-primary/15 text-primary border border-primary/30 font-bold"
+                        : "bg-muted/40 text-muted border border-border"
+                    }`}
+                  >
+                    {t.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
-              {/* 3. User Activity */}
-              <div className="card">
-                <h3 className="font-semibold mb-4 text-sm">Daily User Activity</h3>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={userActivityData}>
-                      <defs>
-                        <linearGradient id="colorActive" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
-                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                      <XAxis dataKey="time" fontSize={12} />
-                      <YAxis fontSize={12} />
-                      <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
-                      <Area type="monotone" dataKey="active" stroke="#3b82f6" fillOpacity={1} fill="url(#colorActive)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* 4. Session Duration Distribution */}
-              <div className="card">
-                <h3 className="font-semibold mb-4 text-sm">Session Duration Distribution</h3>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={sessionDurationData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
-                      <XAxis dataKey="duration" fontSize={12} />
-                      <YAxis fontSize={12} />
-                      <Tooltip cursor={{ fill: '#f3e8ff' }} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
-                      <Bar dataKey="count" fill="#10b981" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </div>
-
-            {/* 5. Reservation Statistics */}
-            <div className="card">
-              <h3 className="font-semibold mb-4 text-sm">Reservation Statistics</h3>
-              <div className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={reservationStatsData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={80}
-                      paddingAngle={5}
-                      dataKey="count"
-                      nameKey="status"
-                      label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
-                      labelLine={false}
-                    >
-                      {reservationStatsData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
-                    <Legend wrapperStyle={{ fontSize: '12px' }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Boards tab */}
+        {/* ══════════════════════════════════════════════════════════════════
+            TAB 1: BOARDS FLEET
+        ══════════════════════════════════════════════════════════════════ */}
         {tab === "boards" && (
-          <div>
-            <div className="card mb-4">
-              <div className="flex flex-wrap items-center gap-4 text-sm">
-                <span className="font-semibold">Boards:</span>
-                <span>Total {boardCounts.total}</span>
-                <span className="text-success">Free {boardCounts.free}</span>
-                <span className="text-warning">Busy {boardCounts.busy}</span>
-                <span className="text-danger">Offline {boardCounts.offline}</span>
-                <span>Blank set {boardCounts.blankConfigured}</span>
+          <div className="space-y-6">
+            {/* System Status Metrics */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="card p-3.5 border border-border/80">
+                <p className="text-[10px] font-mono uppercase tracking-wider text-muted">Total Registered</p>
+                <p className="text-xl font-bold font-mono mt-1">{boardCounts.total}</p>
               </div>
-              <p className="text-xs text-muted mt-2">
-                Tip: Set a per-board blank bitstream to auto-clean hardware after sessions.
-              </p>
+              <div className="card p-3.5 border border-border/80">
+                <p className="text-[10px] font-mono uppercase tracking-wider text-muted">Available / Free</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  <p className="text-xl font-bold font-mono text-emerald-600">{boardCounts.free}</p>
+                </div>
+              </div>
+              <div className="card p-3.5 border border-border/80">
+                <p className="text-[10px] font-mono uppercase tracking-wider text-muted">In Session</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                  <p className="text-xl font-bold font-mono text-amber-600">{boardCounts.busy}</p>
+                </div>
+              </div>
+              <div className="card p-3.5 border border-border/80">
+                <p className="text-[10px] font-mono uppercase tracking-wider text-muted">Verified Hardware</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <ShieldCheckIcon className="w-3.5 h-3.5 text-primary" />
+                  <p className="text-xl font-bold font-mono text-primary">{boardCounts.verified}</p>
+                </div>
+              </div>
             </div>
+
             {loading ? (
-              <div className="text-muted">Loading boards...</div>
+              <div className="text-center py-16 card border-border/60">
+                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                <p className="text-xs text-muted font-mono">Loading boards...</p>
+              </div>
             ) : boards.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="text-5xl mb-4">🔌</div>
-                <h2 className="text-xl font-semibold mb-2">No boards registered</h2>
-                <p className="text-muted mb-4">
-                  Add your first FPGA board to get started.
+              <div className="text-center py-16 card border-border/60">
+                <CpuIcon className="w-8 h-8 text-muted mx-auto mb-2 opacity-50" />
+                <h3 className="text-sm font-bold text-foreground">No boards configured</h3>
+                <p className="text-xs text-muted mt-1 max-w-sm mx-auto">
+                  Scan connected hardware in Hardware Studio to automatically register boards.
                 </p>
-                <button
-                  onClick={() => setTab("add-board")}
-                  className="btn-primary"
-                >
-                  Add Board
-                </button>
+                <div className="mt-4 flex items-center justify-center gap-2">
+                  <button onClick={() => setTab("hardware")} className="btn-primary text-xs py-1.5 px-3">
+                    Open Hardware Studio
+                  </button>
+                  <button onClick={() => setTab("add-board")} className="btn-secondary text-xs py-1.5 px-3">
+                    Add Manually
+                  </button>
+                </div>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {boards.map((board) => (
                   <div
                     key={board.id}
-                    className="card flex items-center justify-between"
+                    className="card p-5 border border-border/80 hover:border-primary/50 transition-colors flex flex-col justify-between"
                   >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-1">
-                        <h3 className="font-semibold">{board.name}</h3>
-                        <span className={`badge badge-${board.status}`}>
-                          {board.status}
-                        </span>
-                      </div>
-                      <div className="text-sm text-muted space-x-4">
-                        <span>{board.fpgaFamily}</span>
-                        <span>Type: {board.boardType}</span>
-                        <span>Tool: {board.programmingTool}</span>
-                        {board.blankBitstreamPath ? (
-                          <span>Blank: set</span>
-                        ) : (
-                          <span>Blank: not set</span>
-                        )}
-                        {board.devicePath && (
-                          <span>Device: {board.devicePath}</span>
-                        )}
-                        {board.ipAddress && (
-                          <span>IP: {board.ipAddress}</span>
-                        )}
-                        {board.serialPort && (
-                          <span>UART: {board.serialPort}</span>
-                        )}
-                        {board.cameraDevice && (
-                          <span>Camera: {board.cameraDevice}</span>
-                        )}
-                        {board.boardImageUrl && (
-                          <span>Image: configured</span>
-                        )}
-                      </div>
-                      {board.boardImageUrl && (
-                        <div className="mt-3">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={board.boardImageUrl}
-                            alt={`${board.name} preview`}
-                            className="h-16 w-24 rounded object-cover border border-border"
-                            loading="lazy"
-                            onError={(e) => {
-                              e.currentTarget.style.display = "none";
-                            }}
-                          />
+                    <div>
+                      {/* Top Header */}
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded bg-muted/10 border border-border flex items-center justify-center font-mono text-xs font-bold text-muted">
+                            {board.boardType.slice(0, 4).toUpperCase()}
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold text-foreground">{board.name}</h3>
+                            <div className="flex items-center gap-2 text-xs text-muted font-mono mt-0.5">
+                              <span>{board.fpgaFamily}</span>
+                              <span>•</span>
+                              <span>{board.boardType}</span>
+                            </div>
+                          </div>
                         </div>
-                      )}
+
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider ${
+                              board.status === "free"
+                                ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
+                                : board.status === "busy"
+                                ? "bg-amber-500/10 text-amber-600 border border-amber-500/20"
+                                : "bg-neutral-500/10 text-neutral-400 border border-neutral-500/20"
+                            }`}
+                          >
+                            {board.status}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Hardware Mapping Status Pill */}
+                      <div className="my-3 p-2 rounded bg-background/60 border border-border/50 flex items-center justify-between text-xs font-mono">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-muted uppercase">Mapping:</span>
+                          {board.mappingStatus === "VERIFIED" && (
+                            <span className="text-emerald-600 font-bold inline-flex items-center gap-1">
+                              <CheckIcon className="w-3 h-3" /> VERIFIED
+                            </span>
+                          )}
+                          {board.mappingStatus === "DEGRADED" && (
+                            <span className="text-red-600 font-bold inline-flex items-center gap-1">
+                              <AlertCircleIcon className="w-3 h-3" /> DEGRADED
+                            </span>
+                          )}
+                          {board.mappingStatus === "PENDING_VERIFICATION" && (
+                            <span className="text-amber-600 font-bold">PENDING TEST</span>
+                          )}
+                          {(!board.mappingStatus || board.mappingStatus === "UNMAPPED") && (
+                            <span className="text-muted">UNMAPPED</span>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleVerifyBoard(board.id)}
+                          disabled={verifyingBoardId === board.id}
+                          className="text-[11px] font-semibold text-primary hover:underline inline-flex items-center gap-1 disabled:opacity-50"
+                        >
+                          <RefreshCwIcon className={`w-3 h-3 ${verifyingBoardId === board.id ? "animate-spin" : ""}`} />
+                          <span>Verify</span>
+                        </button>
+                      </div>
+
+                      {/* Technical Specs List */}
+                      <div className="space-y-1 text-xs text-muted font-mono bg-background/30 p-2.5 rounded border border-border/40">
+                        <div className="flex items-center justify-between">
+                          <span className="text-foreground/60">CAMERA:</span>
+                          <span className="truncate max-w-[240px] text-foreground" title={board.cameraDevice || "None"}>
+                            {board.cameraDevice || "None"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-foreground/60">UART:</span>
+                          <span className="truncate max-w-[240px] text-foreground" title={board.serialPort || "None"}>
+                            {board.serialPort || "None"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-foreground/60">JTAG / IP:</span>
+                          <span className="truncate max-w-[240px] text-foreground" title={board.devicePath || board.ipAddress || "None"}>
+                            {board.devicePath || board.ipAddress || "Default USB"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Capabilities */}
                       {board.capabilities.length > 0 && (
-                        <div className="flex gap-1 mt-2">
+                        <div className="flex flex-wrap gap-1 mt-3">
                           {board.capabilities.map((cap) => (
                             <span
                               key={cap}
-                              className="text-xs bg-background px-2 py-0.5 rounded"
+                              className="text-[9px] font-mono font-bold uppercase tracking-wider bg-background px-1.5 py-0.5 rounded border border-border text-muted"
                             >
                               {cap}
                             </span>
@@ -596,19 +971,26 @@ export default function AdminPage() {
                         </div>
                       )}
                     </div>
-                    <div className="ml-4 flex items-center gap-3">
-                      <button
-                        onClick={() => handleEditBoard(board)}
-                        className="text-primary hover:text-primary/80 text-sm"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteBoard(board.id, board.name)}
-                        className="text-danger hover:text-danger/80 text-sm"
-                      >
-                        Delete
-                      </button>
+
+                    {/* Bottom Actions */}
+                    <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between">
+                      <span className="text-[10px] font-mono text-muted">TIMEOUT: {board.sessionTimeoutMinutes || 30}M</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleEditBoard(board)}
+                          className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded bg-background border border-border hover:bg-muted/10 text-foreground transition-colors"
+                        >
+                          <Edit3Icon className="w-3 h-3" /> Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteBoard(board.id, board.name)}
+                          className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded bg-danger/10 text-danger hover:bg-danger/20 transition-colors"
+                        >
+                          <Trash2Icon className="w-3 h-3" /> Delete
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -617,613 +999,917 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Users tab */}
-        {tab === "users" && (
-          <div>
-            {loading ? (
-              <div className="text-muted">Loading users...</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <div className="mb-4">
-                  <button
-                    onClick={() => { setShowCreateUser(!showCreateUser); setCreateError(""); }}
-                    className="btn-primary"
-                  >
-                    {showCreateUser ? "Hide Create User" : "Create User"}
-                  </button>
-                </div>
-
-                {showCreateUser && (
-                  <div className="card mb-4 p-4">
-                    {createError && (
-                      <div className="text-sm text-danger mb-2">{createError}</div>
-                    )}
-                    <div className="grid grid-cols-3 gap-3">
-                      <input
-                        className="input-field"
-                        placeholder="Full name"
-                        value={createName}
-                        onChange={(e) => setCreateName(e.target.value)}
-                      />
-                      <input
-                        className="input-field"
-                        placeholder="email@vardhaman.org"
-                        value={createEmail}
-                        onChange={(e) => setCreateEmail(e.target.value)}
-                      />
-                      <input
-                        className="input-field"
-                        placeholder="Password (min 8)"
-                        value={createPassword}
-                        onChange={(e) => setCreatePassword(e.target.value)}
-                      />
-                    </div>
-                    <div className="flex items-center gap-3 mt-3">
-                      <select
-                        value={createRole}
-                        onChange={(e) => setCreateRole(e.target.value as "guest" | "student" | "researcher" | "admin")}
-                        className="input-field w-40"
-                      >
-                        <option value="guest">guest</option>
-                        <option value="student">student</option>
-                        <option value="researcher">researcher</option>
-                        <option value="admin">admin</option>
-                      </select>
-                      <div className="flex-1" />
-                      <button
-                        onClick={async () => {
-                          setCreateError("");
-                          if (!createName || !createEmail || createPassword.length < 8) {
-                            setCreateError("Please provide name, valid email, and password (min 8)");
-                            return;
-                          }
-                          // No client-side domain restriction for admin-created users
-                          setCreateLoading(true);
-                          try {
-                            const res = await fetch('/api/admin/users', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ name: createName, email: createEmail, password: createPassword, role: createRole })
-                            });
-                            const data = await res.json();
-                            if (!res.ok) {
-                              setCreateError(data.error || 'Failed to create user');
-                            } else {
-                              setShowCreateUser(false);
-                              setCreateName(''); setCreateEmail(''); setCreatePassword(''); setCreateRole('student');
-                              fetchData();
-                            }
-                          } catch {
-                            setCreateError('Network error');
-                          } finally {
-                            setCreateLoading(false);
-                          }
-                        }}
-                        className="btn-primary"
-                        disabled={createLoading}
-                      >
-                        {createLoading ? 'Creating...' : 'Create User'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-left">
-                      <th className="pb-3 font-medium text-muted">User ID</th>
-                      <th className="pb-3 font-medium text-muted">Name</th>
-                      <th className="pb-3 font-medium text-muted">Email</th>
-                      <th className="pb-3 font-medium text-muted">Role</th>
-                      <th className="pb-3 font-medium text-muted">Verified</th>
-                      <th className="pb-3 font-medium text-muted">Joined</th>
-                      <th className="pb-3 font-medium text-muted text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {users.map((user) => (
-                      <tr key={user.id} className="border-b border-border/50">
-                        <td className="py-3 font-mono text-xs text-muted" title={user.id}>
-                          {user.id.slice(0, 8)}...
-                        </td>
-                        <td className="py-3 font-medium">{user.name}</td>
-                        <td className="py-3 text-muted">{user.email}</td>
-                        <td className="py-3">
-                          <select
-                            value={user.role}
-                            onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                            disabled={updatingRole === user.id}
-                            className={`text-xs px-2 py-1 rounded-full font-medium border-0 cursor-pointer ${
-                              user.role === "admin"
-                                ? "bg-primary/15 text-primary"
-                                : user.role === "researcher"
-                                ? "bg-amber-100 text-amber-700"
-                                : "bg-green-100 text-green-700"
-                            }`}
-                          >
-                            <option value="guest">guest</option>
-                            <option value="student">student</option>
-                            <option value="researcher">researcher</option>
-                            <option value="admin">admin</option>
-                          </select>
-                        </td>
-                        <td className="py-3">
-                          {user.verified ? (
-                            <span className="text-success">✓</span>
-                          ) : (
-                            <span className="text-danger">✗</span>
-                          )}
-                        </td>
-                        <td className="py-3 text-muted">
-                          {new Date(user.createdAt).toLocaleDateString()}
-                        </td>
-                        <td className="py-3 text-right">
-                          <button
-                            onClick={() => handleDeleteUser(user.id, user.name)}
-                            disabled={updatingRole === user.id}
-                            className="text-danger hover:text-danger/80 text-xs font-medium"
-                          >
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Add board tab */}
-        {tab === "add-board" && (
-          <div className="max-w-4xl grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 space-y-6">
-              <form onSubmit={handleSaveBoard} className="space-y-6">
-                <div className="card space-y-4">
-                  <h2 className="font-semibold text-lg">
-                    {editingBoardId ? "Edit Board" : "Board Information"}
-                  </h2>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">
-                    Board Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={boardForm.name}
-                    onChange={(e) =>
-                      setBoardForm({ ...boardForm, name: e.target.value })
-                    }
-                    placeholder="e.g. Basys3 Board #1"
-                    className="input-field"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">
-                    FPGA Family *
-                  </label>
-                  <input
-                    type="text"
-                    value={boardForm.fpgaFamily}
-                    onChange={(e) =>
-                      setBoardForm({ ...boardForm, fpgaFamily: e.target.value })
-                    }
-                    placeholder="e.g. Xilinx Artix-7"
-                    className="input-field"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">
-                    Board Type * (openFPGALoader name)
-                  </label>
-                  <input
-                    type="text"
-                    value={boardForm.boardType}
-                    onChange={(e) =>
-                      setBoardForm({ ...boardForm, boardType: e.target.value })
-                    }
-                    placeholder="e.g. basys3, nexysA7, pynq-z2"
-                    className="input-field"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">
-                    Connection Type
-                  </label>
-                  <select
-                    value={boardForm.connectionType}
-                    onChange={(e) =>
-                      setBoardForm({
-                        ...boardForm,
-                        connectionType: e.target.value,
-                      })
-                    }
-                    className="input-field"
-                  >
-                    <option value="jtag">JTAG</option>
-                    <option value="usb">USB</option>
-                    <option value="network">Network</option>
-                  </select>
-                </div>
-              </div>
-
+        {/* ══════════════════════════════════════════════════════════════════
+            TAB 2: HARDWARE STUDIO & MAPPING (Full-Width Precision Grid)
+        ══════════════════════════════════════════════════════════════════ */}
+        {tab === "hardware" && (
+          <div className="space-y-6">
+            {/* Top Toolbar */}
+            <div className="card p-4 border border-border/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
-                <label className="block text-sm font-medium mb-1.5">
-                  Board Image URL
-                </label>
-                <input
-                  type="text"
-                  value={boardForm.boardImageUrl}
-                  onChange={(e) =>
-                    setBoardForm({ ...boardForm, boardImageUrl: e.target.value })
-                  }
-                  placeholder="https://example.com/fpga-board.jpg"
-                  className="input-field"
-                />
-                <p className="text-xs text-muted mt-1">
-                  Optional: image shown on dashboard board cards.
+                <h2 className="text-sm font-bold text-foreground">Hardware Registry & Visual Binding Studio</h2>
+                <p className="text-xs text-muted font-mono mt-0.5">
+                  Inspect physical USB topology, verify persistent nodes, and bind endpoints to boards.
                 </p>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-1.5">
-                  Blank Bitstream Path
-                </label>
-                <input
-                  type="text"
-                  value={boardForm.blankBitstreamPath}
-                  onChange={(e) =>
-                    setBoardForm({ ...boardForm, blankBitstreamPath: e.target.value })
-                  }
-                  placeholder="/opt/bitstreams/blank.bit"
-                  className="input-field"
-                />
-                <p className="text-xs text-muted mt-1">
-                  Optional: programmed when the session ends.
-                </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleDetect}
+                  disabled={detecting}
+                  className="btn-primary text-xs py-1.5 px-3 inline-flex items-center gap-1.5"
+                >
+                  <RefreshCwIcon className={`w-3.5 h-3.5 ${detecting ? "animate-spin" : ""}`} />
+                  <span>Rescan Hardware</span>
+                </button>
               </div>
             </div>
 
-            <div className="card space-y-4">
-              <h2 className="font-semibold text-lg">Hardware Paths & Credentials</h2>
+            {/* SECTION 1: VIDEO CAMERAS (Wide 3-Column Grid) */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between pb-1 border-b border-border">
+                <h3 className="text-xs font-bold uppercase tracking-wider font-mono text-muted flex items-center gap-2">
+                  <CameraIcon className="w-3.5 h-3.5 text-primary" />
+                  <span>Video Capture Endpoints</span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-muted/15">
+                    {detectedDevices?.cameras.length || 0}
+                  </span>
+                </h3>
+              </div>
 
-              {boardForm.connectionType === "network" && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-border pb-4 mb-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1.5">
-                      SSH Username
-                    </label>
-                    <input
-                      type="text"
-                      value={boardForm.sshUsername}
-                      onChange={(e) =>
-                        setBoardForm({ ...boardForm, sshUsername: e.target.value })
-                      }
-                      placeholder="e.g. xilinx"
-                      className="input-field"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1.5">
-                      SSH Password
-                    </label>
-                    <input
-                      type="password"
-                      value={boardForm.sshPassword}
-                      onChange={(e) =>
-                        setBoardForm({ ...boardForm, sshPassword: e.target.value })
-                      }
-                      placeholder="e.g. xilinx"
-                      className="input-field"
-                    />
-                  </div>
+              {detectedDevices?.cameras.length === 0 && !detecting && (
+                <div className="text-center py-8 card border-border/60 bg-background/50">
+                  <p className="text-xs text-muted font-mono">No video capture devices connected.</p>
                 </div>
               )}
 
-              <div>
-                <label className="block text-sm font-medium mb-1.5">
-                  Device Path (JTAG cable)
-                </label>
-                <input
-                  type="text"
-                  value={boardForm.devicePath}
-                  onChange={(e) =>
-                    setBoardForm({ ...boardForm, devicePath: e.target.value })
-                  }
-                  placeholder="e.g. /dev/ttyUSB0"
-                  className="input-field"
-                />
-              </div>
+              {detectedDevices && detectedDevices.cameras.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {detectedDevices.cameras.map((c) => {
+                    const previewSrc = c.previewUrl
+                      ? `${c.previewUrl}?t=${cameraTimestamps[c.id] || 0}`
+                      : `/api/admin/hardware/cameras/${c.id}/preview`;
 
-              <div>
-                <label className="block text-sm font-medium mb-1.5">
-                  IP Address (for SoC boards e.g. PYNQ)
-                </label>
-                <input
-                  type="text"
-                  value={boardForm.ipAddress}
-                  onChange={(e) =>
-                    setBoardForm({ ...boardForm, ipAddress: e.target.value })
-                  }
-                  placeholder="e.g. 192.168.2.99"
-                  className="input-field"
-                />
-              </div>
+                    const assignedBoard = boards.find(
+                      (b) => b.cameraDeviceId === c.id || b.cameraDevice === c.preferredPath
+                    );
 
-              <div>
-                <label className="block text-sm font-medium mb-1.5">
-                  Serial Port (UART)
-                </label>
-                <input
-                  type="text"
-                  value={boardForm.serialPort}
-                  onChange={(e) =>
-                    setBoardForm({ ...boardForm, serialPort: e.target.value })
-                  }
-                  placeholder="e.g. /dev/ttyUSB1"
-                  className="input-field"
-                />
-              </div>
+                    return (
+                      <div
+                        key={c.id}
+                        className={`card p-0 overflow-hidden border transition-all flex flex-col justify-between ${
+                          assignedBoard ? "border-primary/60" : "border-border/80"
+                        }`}
+                      >
+                        <div>
+                          {/* 16:9 Snapshot Frame */}
+                          <div className="relative aspect-video bg-black/80 flex items-center justify-center overflow-hidden group">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={previewSrc}
+                              alt={c.model}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                              }}
+                            />
 
-              <div>
-                <label className="block text-sm font-medium mb-1.5">
-                  Camera Device
-                </label>
-                <input
-                  type="text"
-                  value={boardForm.cameraDevice}
-                  onChange={(e) =>
-                    setBoardForm({ ...boardForm, cameraDevice: e.target.value })
-                  }
-                  placeholder="e.g. /dev/video0"
-                  className="input-field"
-                />
-              </div>
+                            {/* Status Tag Overlay */}
+                            <div className="absolute top-2 left-2">
+                              {c.isPersistent ? (
+                                <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-900/80 text-emerald-300 border border-emerald-700/50 backdrop-blur">
+                                  PERSISTENT
+                                </span>
+                              ) : (
+                                <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-900/80 text-amber-300 border border-amber-700/50 backdrop-blur">
+                                  TRANSIENT
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="absolute top-2 right-2">
+                              <button
+                                type="button"
+                                onClick={() => handleRefreshCamera(c.id)}
+                                className="text-[10px] font-mono font-semibold bg-black/70 hover:bg-black text-white px-2 py-1 rounded border border-white/20 transition-all flex items-center gap-1"
+                              >
+                                <RefreshCwIcon className="w-2.5 h-2.5" /> Snapshot
+                              </button>
+                            </div>
+
+                            {assignedBoard && (
+                              <div className="absolute bottom-2 left-2 bg-primary text-white text-[10px] font-mono font-bold px-2 py-0.5 rounded shadow flex items-center gap-1">
+                                <CheckIcon className="w-3 h-3" /> {assignedBoard.name}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Metadata */}
+                          <div className="p-3.5 space-y-2">
+                            <div>
+                              <h4 className="font-bold text-xs text-foreground">{c.model}</h4>
+                              <p className="text-[10px] text-muted font-mono mt-0.5">
+                                USB Bus {c.usbBus || "?"}:{c.usbPort || "?"} • SN: {c.serialNumber || "N/A"}
+                              </p>
+                            </div>
+
+                            <div className="text-[10px] font-mono bg-background/80 p-2 rounded border border-border/60 text-muted space-y-0.5">
+                              <div className="truncate text-foreground font-semibold" title={c.preferredPath}>
+                                {c.preferredPath}
+                              </div>
+                              <div className="truncate text-muted/70 text-[9px]">{c.deviceNode}</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Quick Assign Footer */}
+                        <div className="p-3 pt-0 border-t border-border/40 mt-2 flex items-center justify-between gap-2">
+                          <div className="flex-1">
+                            <label className="block text-[9px] font-mono uppercase text-muted mb-1">
+                              Assign to Board:
+                            </label>
+                            <select
+                              value={assignedBoard ? assignedBoard.id : ""}
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  handleQuickAssignHardware(c.id, "camera", e.target.value, c.preferredPath);
+                                }
+                              }}
+                              className="input-field text-[11px] py-1 font-mono"
+                            >
+                              <option value="">-- Unassigned --</option>
+                              {boards.map((b) => (
+                                <option key={b.id} value={b.id}>
+                                  {b.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="pt-3">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleCreateBoardWithHardware({
+                                  cameraDeviceId: c.id,
+                                  cameraDevice: c.preferredPath,
+                                  name: `${c.model} Board`,
+                                })
+                              }
+                              className="text-[11px] font-semibold text-primary hover:underline whitespace-nowrap"
+                            >
+                              + New
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            <div className="card space-y-4">
-              <h2 className="font-semibold text-lg">Configuration</h2>
+            {/* SECTION 2: SERIAL UART MATRIX */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between pb-1 border-b border-border">
+                <h3 className="text-xs font-bold uppercase tracking-wider font-mono text-muted flex items-center gap-2">
+                  <TerminalIcon className="w-3.5 h-3.5 text-primary" />
+                  <span>Serial UART Endpoints</span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-muted/15">
+                    {detectedDevices?.serialPorts.length || 0}
+                  </span>
+                </h3>
+              </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">
-                    Programming Tool
-                  </label>
-                  <select
-                    value={boardForm.programmingTool}
-                    onChange={(e) =>
-                      setBoardForm({
-                        ...boardForm,
-                        programmingTool: e.target.value,
-                      })
-                    }
-                    className="input-field"
-                  >
-                    <option value="openFPGALoader">
-                      openFPGALoader (Universal)
-                    </option>
-                    <option value="xsct">Xilinx xsct</option>
-                    <option value="quartus_pgm">Intel quartus_pgm</option>
-                  </select>
+              {detectedDevices?.serialPorts.length === 0 && !detecting && (
+                <div className="text-center py-8 card border-border/60 bg-background/50">
+                  <p className="text-xs text-muted font-mono">No serial UART ports detected.</p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">
-                    Session Timeout (minutes)
-                  </label>
-                  <input
-                    type="number"
-                    value={boardForm.sessionTimeoutMinutes}
-                    onChange={(e) =>
-                      setBoardForm({
-                        ...boardForm,
-                        sessionTimeoutMinutes: parseInt(e.target.value) || 30,
-                      })
-                    }
-                    min={5}
-                    max={480}
-                    className="input-field"
-                  />
+              )}
+
+              {detectedDevices && detectedDevices.serialPorts.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {detectedDevices.serialPorts.map((p) => {
+                    const assignedBoard = boards.find(
+                      (b) => b.uartDeviceId === p.id || b.serialPort === p.preferredPath
+                    );
+                    const testResult = uartTestResults[p.id];
+                    const isTesting = testingUart[p.id];
+
+                    return (
+                      <div
+                        key={p.id}
+                        className={`card p-4 border transition-all flex flex-col justify-between ${
+                          assignedBoard ? "border-primary/60" : "border-border/80"
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <div>
+                              <h4 className="font-bold text-xs text-foreground">{p.model}</h4>
+                              <p className="text-[10px] text-muted font-mono">
+                                Bus {p.usbBus || "?"}:{p.usbPort || "?"} • SN: {p.serialNumber || "N/A"}
+                              </p>
+                            </div>
+
+                            {p.isPersistent ? (
+                              <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                                {p.byId ? "by-id" : "by-path"}
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                                transient
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="text-[10px] font-mono bg-background/80 p-2 rounded border border-border/60 text-muted my-2 space-y-0.5">
+                            <div className="truncate text-foreground font-semibold" title={p.preferredPath}>
+                              {p.preferredPath}
+                            </div>
+                            <div className="truncate text-muted/70 text-[9px]">{p.deviceNode}</div>
+                          </div>
+
+                          {/* Diagnostic Test Button */}
+                          <div className="my-2 space-y-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleTestUart(p.id)}
+                              disabled={isTesting}
+                              className="w-full text-xs font-semibold py-1.5 rounded bg-background hover:bg-muted/10 text-foreground border border-border transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                            >
+                              <ZapIcon className={`w-3 h-3 ${isTesting ? "animate-spin" : ""}`} />
+                              <span>{isTesting ? "Testing Latency..." : "Test 115200 Baud"}</span>
+                            </button>
+
+                            {testResult && (
+                              <div
+                                className={`p-2 rounded text-[11px] font-mono flex items-center justify-between border ${
+                                  testResult.success
+                                    ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                                    : "bg-red-500/10 text-red-600 border-red-500/20"
+                                }`}
+                              >
+                                <span>{testResult.message}</span>
+                                {testResult.latencyMs && <span>{testResult.latencyMs}ms</span>}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Quick Assign Footer */}
+                        <div className="pt-2 border-t border-border/40 flex items-center justify-between gap-2">
+                          <div className="flex-1">
+                            <label className="block text-[9px] font-mono uppercase text-muted mb-1">
+                              Assign to Board:
+                            </label>
+                            <select
+                              value={assignedBoard ? assignedBoard.id : ""}
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  handleQuickAssignHardware(p.id, "uart", e.target.value, p.preferredPath);
+                                }
+                              }}
+                              className="input-field text-[11px] py-1 font-mono"
+                            >
+                              <option value="">-- Unassigned --</option>
+                              {boards.map((b) => (
+                                <option key={b.id} value={b.id}>
+                                  {b.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="pt-3">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleCreateBoardWithHardware({
+                                  uartDeviceId: p.id,
+                                  serialPort: p.preferredPath,
+                                  name: `${p.model} Board`,
+                                })
+                              }
+                              className="text-[11px] font-semibold text-primary hover:underline whitespace-nowrap"
+                            >
+                              + New
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* SECTION 3: JTAG DISCOVERY */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between pb-1 border-b border-border">
+                <h3 className="text-xs font-bold uppercase tracking-wider font-mono text-muted flex items-center gap-2">
+                  <CpuIcon className="w-3.5 h-3.5 text-primary" />
+                  <span>JTAG FPGA Probes</span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-muted/15">
+                    {detectedDevices?.hardware.length || 0}
+                  </span>
+                </h3>
+              </div>
+
+              {detectedDevices && detectedDevices.hardware.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {detectedDevices.hardware.map((h, i) => (
+                    <div key={i} className="card p-4 border border-border/80 flex flex-col justify-between">
+                      <div>
+                        <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
+                          IDCODE: {h.idcode}
+                        </span>
+                        <p className="text-xs text-muted leading-relaxed my-2">{h.description}</p>
+                      </div>
+
+                      {h.template && (
+                        <button
+                          type="button"
+                          onClick={() => applyTemplate(h)}
+                          className="mt-2 w-full btn-primary text-xs py-1.5 font-semibold"
+                        >
+                          Use Template ({h.template.name})
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════════
+            TAB 3: ADD / EDIT BOARD (Clean Form Layout)
+        ══════════════════════════════════════════════════════════════════ */}
+        {tab === "add-board" && (
+          <div className="max-w-3xl mx-auto space-y-6">
+            <form onSubmit={handleSaveBoard} className="space-y-5">
+              <div className="card p-5 space-y-4 border border-border/80">
+                <div className="flex items-center justify-between pb-3 border-b border-border">
+                  <h2 className="font-bold text-sm text-foreground">
+                    {editingBoardId ? "Edit FPGA Board Profile" : "Create New FPGA Board Profile"}
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setTab("hardware")}
+                    className="text-xs font-semibold text-primary hover:underline"
+                  >
+                    Open Hardware Studio ↗
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-muted mb-1">
+                      Board Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={boardForm.name}
+                      onChange={(e) => setBoardForm({ ...boardForm, name: e.target.value })}
+                      placeholder="e.g. Basys3 Station 1"
+                      className="input-field text-xs"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-muted mb-1">
+                      FPGA Family *
+                    </label>
+                    <input
+                      type="text"
+                      value={boardForm.fpgaFamily}
+                      onChange={(e) => setBoardForm({ ...boardForm, fpgaFamily: e.target.value })}
+                      placeholder="e.g. Xilinx Artix-7"
+                      className="input-field text-xs"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-muted mb-1">
+                      Board Type * (openFPGALoader name)
+                    </label>
+                    <input
+                      type="text"
+                      value={boardForm.boardType}
+                      onChange={(e) => setBoardForm({ ...boardForm, boardType: e.target.value })}
+                      placeholder="e.g. basys3, pynq-z2"
+                      className="input-field text-xs"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-muted mb-1">
+                      Connection Protocol
+                    </label>
+                    <select
+                      value={boardForm.connectionType}
+                      onChange={(e) => setBoardForm({ ...boardForm, connectionType: e.target.value })}
+                      className="input-field text-xs"
+                    >
+                      <option value="jtag">JTAG (USB Cable)</option>
+                      <option value="usb">USB DFU</option>
+                      <option value="network">Network SoC (PYNQ / SSH)</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Capabilities
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {["led", "uart", "camera", "switches", "ethernet", "display"].map(
-                    (cap) => (
+              {/* Hardware Bindings */}
+              <div className="card p-5 space-y-4 border border-border/80">
+                <h3 className="font-bold text-sm text-foreground pb-2 border-b border-border">Hardware Endpoints</h3>
+
+                <div>
+                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-muted mb-1">
+                    Camera Endpoint
+                  </label>
+                  <select
+                    value={boardForm.cameraDeviceId || boardForm.cameraDevice}
+                    onChange={(e) => {
+                      const selectedCam = detectedDevices?.cameras.find(
+                        (c) => c.id === e.target.value || c.preferredPath === e.target.value
+                      );
+                      if (selectedCam) {
+                        setBoardForm({
+                          ...boardForm,
+                          cameraDeviceId: selectedCam.id,
+                          cameraDevice: selectedCam.preferredPath,
+                        });
+                      } else {
+                        setBoardForm({
+                          ...boardForm,
+                          cameraDeviceId: "",
+                          cameraDevice: e.target.value,
+                        });
+                      }
+                    }}
+                    className="input-field text-xs font-mono"
+                  >
+                    <option value="">-- None Assigned --</option>
+                    {detectedDevices?.cameras.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.model} [{c.preferredPath}]
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-muted mb-1">
+                    Serial UART Port
+                  </label>
+                  <select
+                    value={boardForm.uartDeviceId || boardForm.serialPort}
+                    onChange={(e) => {
+                      const selectedUart = detectedDevices?.serialPorts.find(
+                        (p) => p.id === e.target.value || p.preferredPath === e.target.value
+                      );
+                      if (selectedUart) {
+                        setBoardForm({
+                          ...boardForm,
+                          uartDeviceId: selectedUart.id,
+                          serialPort: selectedUart.preferredPath,
+                        });
+                      } else {
+                        setBoardForm({
+                          ...boardForm,
+                          uartDeviceId: "",
+                          serialPort: e.target.value,
+                        });
+                      }
+                    }}
+                    className="input-field text-xs font-mono"
+                  >
+                    <option value="">-- None Assigned --</option>
+                    {detectedDevices?.serialPorts.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.model} [{p.preferredPath}]
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {boardForm.connectionType === "network" && (
+                  <div className="grid grid-cols-3 gap-3 pt-2">
+                    <div>
+                      <label className="block text-[10px] font-mono font-bold uppercase text-muted mb-1">Target IP</label>
+                      <input
+                        type="text"
+                        value={boardForm.ipAddress}
+                        onChange={(e) => setBoardForm({ ...boardForm, ipAddress: e.target.value })}
+                        placeholder="192.168.2.99"
+                        className="input-field text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-mono font-bold uppercase text-muted mb-1">SSH User</label>
+                      <input
+                        type="text"
+                        value={boardForm.sshUsername}
+                        onChange={(e) => setBoardForm({ ...boardForm, sshUsername: e.target.value })}
+                        placeholder="xilinx"
+                        className="input-field text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-mono font-bold uppercase text-muted mb-1">SSH Pass</label>
+                      <input
+                        type="password"
+                        value={boardForm.sshPassword}
+                        onChange={(e) => setBoardForm({ ...boardForm, sshPassword: e.target.value })}
+                        placeholder="xilinx"
+                        className="input-field text-xs"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Capabilities & Controls */}
+              <div className="card p-5 space-y-4 border border-border/80">
+                <h3 className="font-bold text-sm text-foreground pb-2 border-b border-border">Peripherals & Limits</h3>
+
+                <div>
+                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-muted mb-2">
+                    Supported Capabilities
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {["uart", "camera", "led", "switches", "7segment", "pynq-jupyter", "gpio"].map((cap) => (
                       <button
                         key={cap}
                         type="button"
                         onClick={() => toggleCapability(cap)}
-                        className={`px-3 py-1.5 rounded-lg text-sm border transition-all duration-150 ${
+                        className={`flex items-center gap-1.5 text-xs font-mono px-2.5 py-1 rounded border transition-colors ${
                           boardForm.capabilities.includes(cap)
-                            ? "bg-emerald-600 border-emerald-600 text-white font-semibold shadow-sm shadow-emerald-600/10 scale-95"
-                            : "bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500 hover:border-slate-400 hover:text-slate-700"
+                            ? "bg-primary text-white border-primary"
+                            : "bg-background text-muted border-border hover:border-primary/40"
                         }`}
                       >
-                        {cap}
+                        {boardForm.capabilities.includes(cap) ? (
+                          <CheckIcon className="w-3.5 h-3.5" />
+                        ) : (
+                          <PlusIcon className="w-3.5 h-3.5" />
+                        )}
+                        {cap.toUpperCase()}
                       </button>
-                    )
-                  )}
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 pt-2">
+                  <div>
+                    <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-muted mb-1">
+                      Timeout (Minutes)
+                    </label>
+                    <input
+                      type="number"
+                      min={5}
+                      max={180}
+                      value={boardForm.sessionTimeoutMinutes}
+                      onChange={(e) =>
+                        setBoardForm({ ...boardForm, sessionTimeoutMinutes: parseInt(e.target.value, 10) || 30 })
+                      }
+                      className="input-field text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-muted mb-1">
+                      Programming Tool
+                    </label>
+                    <input
+                      type="text"
+                      value={boardForm.programmingTool}
+                      onChange={(e) => setBoardForm({ ...boardForm, programmingTool: e.target.value })}
+                      placeholder="openFPGALoader"
+                      className="input-field text-xs font-mono"
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="flex items-center gap-3">
-              <button type="submit" className="btn-primary flex-1">
-                {editingBoardId ? "Update Board" : "Add Board"}
-              </button>
-              {editingBoardId && (
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  className="btn-secondary"
-                  onClick={resetBoardForm}
+                  onClick={() => {
+                    resetBoardForm();
+                    setTab("boards");
+                  }}
+                  className="btn-secondary text-xs px-4 py-2"
                 >
-                  Cancel Edit
+                  Cancel
                 </button>
-              )}
-            </div>
-          </form>
-          </div>
-
-          {/* Setup Assistant Side Panel */}
-          <div className="lg:col-span-1 space-y-6">
-            <div className="card sticky top-8">
-              <div className="flex items-center justify-between mb-4 pb-2 border-b border-white/5">
-                <h3 className="font-semibold flex items-center gap-2">
-                  <span className="text-primary">🛠️</span> Setup Assistant
-                </h3>
-                <button 
-                  type="button"
-                  onClick={handleDetect}
-                  disabled={detecting}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                    detecting 
-                    ? "bg-muted/10 text-muted cursor-not-allowed" 
-                    : "bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 active:scale-95"
-                  }`}
-                >
-                  {detecting ? (
-                    <>
-                      <span className="animate-spin text-sm">🔄</span>
-                      SCANNING...
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-sm">🔍</span>
-                      SCAN HARDWARE
-                    </>
-                  )}
+                <button type="submit" className="btn-primary text-xs px-5 py-2 font-semibold">
+                  {editingBoardId ? "Update Board" : "Save Board"}
                 </button>
               </div>
+            </form>
+          </div>
+        )}
 
-              {!detectedDevices && !detecting && (
-                <div className="bg-primary/5 border border-primary/20 rounded-xl p-6 text-center shadow-inner">
-                  <div className="text-3xl mb-3 opacity-80">🔭</div>
-                  <h4 className="font-semibold text-primary mb-2">Ready to Scan</h4>
-                  <p className="text-xs text-muted leading-relaxed max-w-sm mx-auto">
-                    Click <b>SCAN HARDWARE</b> to auto-detect connected FPGA boards via JTAG, available UART ports, and Webcams.
-                  </p>
+        {/* ══════════════════════════════════════════════════════════════════
+            TAB 4: ANALYTICS (Charts & Telemetry)
+        ══════════════════════════════════════════════════════════════════ */}
+        {tab === "analytics" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-sm text-foreground">Fleet Telemetry & Usage Analytics</h3>
+                <p className="text-xs text-muted font-mono">Aggregated from active hardware sessions, jobs, and board telemetry</p>
+              </div>
+              <button
+                onClick={fetchAnalytics}
+                disabled={loadingAnalytics}
+                className="btn-secondary text-xs py-1.5 px-3 inline-flex items-center gap-1.5"
+              >
+                <span>{loadingAnalytics ? "Refreshing..." : "Refresh Analytics"}</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="card p-4 border border-border/80">
+                <h3 className="font-bold text-xs uppercase tracking-wider font-mono text-muted mb-4">
+                  Weekly Session Volume
+                </h3>
+                <div className="h-60">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={analyticsData?.fpgaUsageData || []}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                      <XAxis dataKey="day" fontSize={11} />
+                      <YAxis fontSize={11} />
+                      <Tooltip contentStyle={{ borderRadius: "6px", fontSize: "11px" }} />
+                      <Line type="monotone" dataKey="sessions" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
                 </div>
-              )}
+              </div>
 
-              {detecting && (
-                <div className="py-12 flex flex-col items-center justify-center relative rounded-xl border border-primary/20 bg-primary/5 overflow-hidden shadow-inner">
-                  <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin mb-4 shadow-[0_0_15px_rgba(59,130,246,0.4)]"></div>
-                  <p className="text-sm font-bold text-primary tracking-wide animate-pulse uppercase">Scanning Hardware</p>
-                  <p className="text-[10px] text-muted mt-2 tracking-wider">Probing JTAG, UART & Video</p>
+              <div className="card p-4 border border-border/80">
+                <h3 className="font-bold text-xs uppercase tracking-wider font-mono text-muted mb-4">
+                  Board Fleet Utilization
+                </h3>
+                <div className="h-60">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analyticsData?.boardUtilizationData || []} layout="vertical" margin={{ left: 10 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" horizontal={true} vertical={false} />
+                      <XAxis type="number" fontSize={11} />
+                      <YAxis dataKey="board" type="category" fontSize={11} width={80} />
+                      <Tooltip contentStyle={{ borderRadius: "6px", fontSize: "11px" }} />
+                      <Bar dataKey="runs" fill="#8b5cf6" radius={[0, 3, 3, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
-              )}
+              </div>
 
-              {detectedDevices && (
-                <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  {/* JTAG Hardware */}
-                  <div className="bg-card rounded-xl border border-border p-4 shadow-sm hover:shadow-md transition-shadow">
-                    <h4 className="text-xs font-bold text-foreground flex items-center gap-2 mb-3 pb-2 border-b border-border/50">
-                      <span>🔌</span> Detected FPGAs
-                    </h4>
-                    {detectedDevices.hardware.length === 0 ? (
-                      <div className="text-center py-5 bg-background/50 rounded-lg border border-dashed border-border/50">
-                        <p className="text-xs text-muted">No JTAG devices found.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {detectedDevices.hardware.map((h, i) => (
-                          <div key={i} className="group relative p-3 rounded-lg bg-background/50 border border-border hover:border-primary/50 transition-all hover:shadow-[0_0_15px_rgba(59,130,246,0.1)]">
-                            <div className="flex items-start justify-between mb-2">
-                              <div>
-                                <span className="text-sm font-mono font-bold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">{h.idcode}</span>
-                              </div>
-                              {h.template && (
-                                <button 
-                                  type="button"
-                                  onClick={() => applyTemplate(h)}
-                                  className="text-[10px] bg-primary hover:bg-primary-hover text-white px-2.5 py-1.5 rounded shadow-md transition-transform active:scale-95 font-bold tracking-wide"
-                                >
-                                  USE TEMPLATE
-                                </button>
-                              )}
-                            </div>
-                            <p className="text-xs text-muted leading-relaxed">{h.description}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+              <div className="card p-4 border border-border/80">
+                <h3 className="font-bold text-xs uppercase tracking-wider font-mono text-muted mb-4">
+                  Hourly Peak Hours
+                </h3>
+                <div className="h-60">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={analyticsData?.userActivityData || []}>
+                      <defs>
+                        <linearGradient id="colorActive" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
+                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                      <XAxis dataKey="time" fontSize={11} />
+                      <YAxis fontSize={11} />
+                      <Tooltip contentStyle={{ borderRadius: "6px", fontSize: "11px" }} />
+                      <Area type="monotone" dataKey="active" stroke="#3b82f6" fillOpacity={1} fill="url(#colorActive)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
 
-                  {/* UART Ports */}
-                  <div className="bg-card rounded-xl border border-border p-4 shadow-sm hover:shadow-md transition-shadow">
-                    <h4 className="text-xs font-bold text-foreground flex items-center gap-2 mb-3 pb-2 border-b border-border/50">
-                      <span>📟</span> Available UART Ports
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {detectedDevices.serialPorts.map((p) => (
-                        <button
-                          key={p}
-                          type="button"
-                          onClick={() => setBoardForm({ ...boardForm, serialPort: p })}
-                          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-background border border-border hover:border-primary hover:bg-primary/5 hover:text-primary transition-all active:scale-95 shadow-sm"
-                          title="Click to use this port"
-                        >
-                          <span className="text-primary/70">🔌</span>
-                          {p.replace("/dev/", "")}
-                        </button>
+              <div className="card p-4 border border-border/80">
+                <h3 className="font-bold text-xs uppercase tracking-wider font-mono text-muted mb-4">
+                  Session Duration Distribution
+                </h3>
+                <div className="h-60">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analyticsData?.sessionDurationData || []}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                      <XAxis dataKey="duration" fontSize={11} />
+                      <YAxis fontSize={11} />
+                      <Tooltip contentStyle={{ borderRadius: "6px", fontSize: "11px" }} />
+                      <Bar dataKey="count" fill="#10b981" radius={[3, 3, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            <div className="card p-4 border border-border/80">
+              <h3 className="font-bold text-xs uppercase tracking-wider font-mono text-muted mb-4">
+                Job Execution Breakdown
+              </h3>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={analyticsData?.reservationStatsData || []}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={70}
+                      paddingAngle={4}
+                      dataKey="count"
+                      nameKey="status"
+                    >
+                      {(analyticsData?.reservationStatsData || []).map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                       ))}
-                      {detectedDevices.serialPorts.length === 0 && (
-                        <p className="text-xs text-muted italic px-2 py-1">No serial ports found.</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Cameras */}
-                  <div className="bg-card rounded-xl border border-border p-4 shadow-sm hover:shadow-md transition-shadow">
-                    <h4 className="text-xs font-bold text-foreground flex items-center gap-2 mb-3 pb-2 border-b border-border/50">
-                      <span>📷</span> Video Devices
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {detectedDevices.cameras.map((c) => (
-                        <button
-                          key={c}
-                          type="button"
-                          onClick={() => setBoardForm({ ...boardForm, cameraDevice: c })}
-                          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-background border border-border hover:border-accent hover:bg-accent/5 hover:text-accent transition-all active:scale-95 shadow-sm"
-                          title="Click to use this camera"
-                        >
-                          <span className="text-accent/70">👁️</span>
-                          {c.replace("/dev/", "")}
-                        </button>
-                      ))}
-                      {detectedDevices.cameras.length === 0 && (
-                        <p className="text-xs text-muted italic px-2 py-1">No cameras found.</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Raw detection output */}
-                  {detectedDevices.rawOutput && (
-                    <div className="bg-card rounded-xl border border-border p-4 shadow-sm hover:shadow-md transition-shadow">
-                      <h4 className="text-xs font-bold text-foreground flex items-center gap-2 mb-3 pb-2 border-b border-border/50">
-                        <span>📝</span> Detector Log
-                      </h4>
-                      <pre className="text-[10px] font-mono bg-background border border-border/50 rounded-lg p-3 max-h-48 overflow-auto whitespace-pre-wrap text-muted">
-                        {detectedDevices.rawOutput}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-              )}
+                    </Pie>
+                    <Tooltip contentStyle={{ borderRadius: "6px", fontSize: "11px" }} />
+                    <Legend wrapperStyle={{ fontSize: "11px" }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </div>
-        </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════════
+            TAB 5: USERS MANAGEMENT
+        ══════════════════════════════════════════════════════════════════ */}
+        {tab === "users" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-sm text-foreground">User Management</h3>
+                <p className="text-xs text-muted font-mono">Control roles, access permissions, and account status</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowCreateUser(!showCreateUser);
+                  setCreateError("");
+                }}
+                className="btn-primary text-xs py-1.5 px-3 inline-flex items-center gap-1.5"
+              >
+                <PlusIcon className="w-3.5 h-3.5" />
+                <span>{showCreateUser ? "Cancel" : "Create User"}</span>
+              </button>
+            </div>
+
+            {showCreateUser && (
+              <div className="card p-4 border border-primary/30 bg-primary/5 space-y-3">
+                <h4 className="font-bold text-xs text-foreground uppercase tracking-wider font-mono">New User</h4>
+                {createError && <div className="text-xs text-danger">{createError}</div>}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <input
+                    className="input-field text-xs"
+                    placeholder="Full name"
+                    value={createName}
+                    onChange={(e) => setCreateName(e.target.value)}
+                  />
+                  <input
+                    className="input-field text-xs"
+                    placeholder="email@domain.com"
+                    value={createEmail}
+                    onChange={(e) => setCreateEmail(e.target.value)}
+                  />
+                  <input
+                    type="password"
+                    className="input-field text-xs"
+                    placeholder="Password (min 8 chars)"
+                    value={createPassword}
+                    onChange={(e) => setCreatePassword(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-center justify-between pt-1">
+                  <div className="flex items-center gap-2">
+                    <label className="text-[10px] font-mono font-bold text-muted uppercase">Role:</label>
+                    <select
+                      value={createRole}
+                      onChange={(e) =>
+                        setCreateRole(e.target.value as "guest" | "student" | "researcher" | "admin")
+                      }
+                      className="input-field w-32 text-xs py-1"
+                    >
+                      <option value="guest">guest</option>
+                      <option value="student">student</option>
+                      <option value="researcher">researcher</option>
+                      <option value="admin">admin</option>
+                    </select>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setCreateError("");
+                      if (!createName || !createEmail || createPassword.length < 8) {
+                        setCreateError("Provide name, valid email, and password (min 8 chars)");
+                        return;
+                      }
+                      setCreateLoading(true);
+                      try {
+                        const res = await fetch("/api/admin/users", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            name: createName,
+                            email: createEmail,
+                            password: createPassword,
+                            role: createRole,
+                          }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) {
+                          setCreateError(data.error || "Failed to create user");
+                        } else {
+                          setShowCreateUser(false);
+                          setCreateName("");
+                          setCreateEmail("");
+                          setCreatePassword("");
+                          setCreateRole("student");
+                          fetchData();
+                        }
+                      } catch {
+                        setCreateError("Network error during user creation");
+                      } finally {
+                        setCreateLoading(false);
+                      }
+                    }}
+                    className="btn-primary text-xs px-4 py-1.5"
+                    disabled={createLoading}
+                  >
+                    {createLoading ? "Saving..." : "Save User"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="card p-0 overflow-x-auto border border-border/80">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border text-left bg-muted/5 font-mono">
+                    <th className="p-3 font-bold text-muted uppercase">ID</th>
+                    <th className="p-3 font-bold text-muted uppercase">Name</th>
+                    <th className="p-3 font-bold text-muted uppercase">Email</th>
+                    <th className="p-3 font-bold text-muted uppercase">Role</th>
+                    <th className="p-3 font-bold text-muted uppercase">Verified</th>
+                    <th className="p-3 font-bold text-muted uppercase">Created</th>
+                    <th className="p-3 font-bold text-muted uppercase text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/40">
+                  {users.map((user) => (
+                    <tr key={user.id} className="hover:bg-muted/5 transition-colors">
+                      <td className="p-3 font-mono text-muted">{user.id.slice(0, 8)}...</td>
+                      <td className="p-3 font-semibold">{user.name}</td>
+                      <td className="p-3 text-muted">{user.email}</td>
+                      <td className="p-3">
+                        <select
+                          value={user.role}
+                          onChange={(e) => handleRoleChange(user.id, e.target.value)}
+                          disabled={updatingRole === user.id}
+                          className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded border border-border bg-background cursor-pointer"
+                        >
+                          <option value="guest">guest</option>
+                          <option value="student">student</option>
+                          <option value="researcher">researcher</option>
+                          <option value="admin">admin</option>
+                        </select>
+                      </td>
+                      <td className="p-3">
+                        {user.verified ? (
+                          <span className="text-emerald-600 font-mono font-bold">YES</span>
+                        ) : (
+                          <span className="text-muted font-mono">NO</span>
+                        )}
+                      </td>
+                      <td className="p-3 text-muted font-mono">
+                        {new Date(user.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="p-3 text-right">
+                        <button
+                          onClick={() => handleDeleteUser(user.id, user.name)}
+                          disabled={updatingRole === user.id}
+                          className="text-danger hover:underline font-semibold"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
       </main>
 

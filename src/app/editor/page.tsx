@@ -111,6 +111,7 @@ export default function EditorPage() {
     bramUsage,
     dspUsage,
     schematicSvg,
+    placementData,
     historyJobs,
     handleRunSynthesis,
     handleRunImplementation,
@@ -345,6 +346,7 @@ export default function EditorPage() {
             globalRadix={globalRadix}
             setGlobalRadix={setGlobalRadix}
             schematicSvg={schematicSvg}
+            placementData={placementData}
           />
         </div>
       )}

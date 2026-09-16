@@ -12,12 +12,44 @@ const pool = new Pool({ connectionString });
 
 console.log("[SynthesisWorker] Starting compilation worker...");
 
-async function pollQueue() {
+let isProcessing = false;
+
+async function recoverStaleJobs() {
   try {
-    // 1. Fetch next queued job
-    const queueRes = await pool.query(
-      "SELECT * FROM synthesis_jobs WHERE status = 'queued' ORDER BY created_at ASC LIMIT 1"
-    );
+    const staleRes = await pool.query(`
+      UPDATE synthesis_jobs
+      SET status = 'failed',
+          logs = 'Error: Job timed out or synthesis worker restarted during processing.',
+          completed_at = NOW()
+      WHERE status = 'processing'
+        AND created_at < NOW() - INTERVAL '5 minutes'
+      RETURNING id
+    `);
+    if (staleRes.rows.length > 0) {
+      console.warn(`[SynthesisWorker] Recovered ${staleRes.rows.length} stale synthesis jobs:`, staleRes.rows.map(r => r.id));
+    }
+  } catch (err) {
+    console.error("[SynthesisWorker] Error recovering stale jobs:", err.message);
+  }
+}
+
+async function pollQueue() {
+  if (isProcessing) return;
+  try {
+    // 1. Atomically pick up and lock the next queued job
+    const queueRes = await pool.query(`
+      UPDATE synthesis_jobs
+      SET status = 'processing'
+      WHERE id = (
+        SELECT id
+        FROM synthesis_jobs
+        WHERE status = 'queued'
+        ORDER BY created_at ASC
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING *
+    `);
 
     if (queueRes.rows.length === 0) {
       return;
@@ -26,15 +58,12 @@ async function pollQueue() {
     const job = queueRes.rows[0];
     console.log(`[SynthesisWorker] Picked up job ${job.id} for user ${job.user_id}`);
 
-    // 2. Lock job in 'processing' status
-    await pool.query(
-      "UPDATE synthesis_jobs SET status = 'processing' WHERE id = $1",
-      [job.id]
-    );
-
-    // 3. Perform synthesis & simulation
-    await processJob(job);
-
+    isProcessing = true;
+    try {
+      await processJob(job);
+    } finally {
+      isProcessing = false;
+    }
   } catch (err) {
     console.error("[SynthesisWorker] Queue poll error:", err.message);
   }
@@ -43,6 +72,16 @@ async function pollQueue() {
 async function processJob(job) {
   const workDir = path.resolve(process.cwd(), job.work_dir);
   const topModule = job.top_module || "main";
+
+  // Security validation: top module identifier must be a valid Verilog identifier
+  if (!/^[a-zA-Z_][a-zA-Z0-9_$]*$/.test(topModule)) {
+    console.error(`[SynthesisWorker] Invalid top module "${topModule}" for job ${job.id}`);
+    await pool.query(
+      "UPDATE synthesis_jobs SET status = 'failed', logs = $1, completed_at = NOW() WHERE id = $2",
+      [`Security error: Invalid top module identifier "${topModule}". Only alphanumeric characters, underscores, and $ are allowed.`, job.id]
+    );
+    return;
+  }
 
   if (!fs.existsSync(workDir)) {
     console.error(`[SynthesisWorker] Directory ${workDir} does not exist for job ${job.id}`);
@@ -59,6 +98,17 @@ async function processJob(job) {
     const ext = path.extname(f).toLowerCase();
     return ext === ".v" || ext === ".sv";
   });
+
+  // Verify safe filenames (no shell injections)
+  const safeFilenameRegex = /^[a-zA-Z0-9_.-]+$/;
+  const invalidFiles = copiedFiles.filter(f => !safeFilenameRegex.test(f));
+  if (invalidFiles.length > 0) {
+    await pool.query(
+      "UPDATE synthesis_jobs SET status = 'failed', logs = $1, completed_at = NOW() WHERE id = $2",
+      [`Security error: Invalid filenames detected in project (${invalidFiles.join(", ")}).`, job.id]
+    );
+    return;
+  }
 
   if (copiedFiles.length === 0) {
     await pool.query(
@@ -160,27 +210,79 @@ async function processJob(job) {
       powerReport = `========================================================\nPOWER ESTIMATION REPORT\n========================================================\n\nTotal On-Chip Power: ${(0.120 + (lutCount * 0.0005)).toFixed(3)} W\n  - Dynamic Power: ${(lutCount * 0.0005).toFixed(3)} W\n  - Static Power: 0.120 W\n\nJunction Temperature: 26.4 C (Met)\n========================================================`;
 
     } catch (pnrErr) {
-      console.warn(`[SynthesisWorker] NextPNR failed, falling back to estimations:`, pnrErr.message);
+      console.warn(`[SynthesisWorker] NextPNR execution status:`, pnrErr.message);
 
       const ffCount = (stdoutLogs.match(/\\$dff|\\$adff|\\$sdff/g) || []).length;
       const lutCount = (stdoutLogs.match(/\\$lut/g) || []).length;
-      const cellCount = ffCount + lutCount;
-      
-      const wns = (10 - (cellCount * 0.05 + 1.2)).toFixed(3);
-      timingReport = `========================================================\nTIMING REPORT (ESTIMATED)\n========================================================\n\nTarget Clock Frequency:  100.0 MHz (Period: 10.0ns)\nEstimated Logic Levels:  ${Math.max(1, Math.round(cellCount / 4))}\nEstimated Path Delay:    ${(cellCount * 0.05 + 1.2).toFixed(3)} ns\n\nWorst Negative Slack (WNS):  +${wns} ns (MET)\nTotal Negative Slack (TNS):  0.000 ns (MET)\n\nSetup constraints verified. All paths successfully mapped.\n========================================================`;
-      powerReport = `========================================================\nPOWER ESTIMATION REPORT (ESTIMATED)\n========================================================\n\nTotal On-Chip Power:    ${(0.120 + (cellCount * 0.0005)).toFixed(3)} W\n  - Dynamic Power:      ${(cellCount * 0.0005).toFixed(3)} W\n  - Static Power:       0.120 W\n\nJunction Temperature:   26.4 C (Met)\n========================================================`;
-      areaReport = `========================================================\nRESOURCE UTILIZATION REPORT (YOSYS)\n========================================================\n\nModule: ${topModule}\nCells synthesized successfully.\nFlip-flops: ${ffCount}\nLUTs: ${lutCount}`;
 
-      // Write mock bitstream for fallback compilation so it can still be programmed/run
-      try {
-        const destDir = path.resolve(process.cwd(), "uploads", job.user_id, job.id);
-        fs.mkdirSync(destDir, { recursive: true });
-        const destFile = path.join(destDir, `${topModule}.bin`);
-        fs.writeFileSync(destFile, "MOCK_BITSTREAM_DATA\n", "utf-8");
-        console.log(`[SynthesisWorker] Mock fallback bitstream written to ${destFile}`);
-      } catch (mockErr) {
-        console.error(`[SynthesisWorker] Failed to write mock bitstream:`, mockErr.message);
+      timingReport = `========================================================\nTIMING & PnR REPORT\n========================================================\n\nNextPNR or target Place-and-Route tool not installed on server.\nYosys RTL synthesis succeeded. To generate target bitstream, install nextpnr-ice40 / nextpnr-ecp5.`;
+      powerReport = `========================================================\nPOWER ESTIMATION REPORT\n========================================================\n\nInstall NextPNR for power estimation on target device architecture.`;
+      areaReport = `========================================================\nRESOURCE UTILIZATION REPORT (YOSYS)\n========================================================\n\nModule: ${topModule}\nCells synthesized successfully.\nFlip-flops: ${ffCount}\nLUTs: ${lutCount}`;
+    }
+    try {
+      const netlistPath = path.join(workDir, "synth_netlist.json");
+      if (fs.existsSync(netlistPath)) {
+        const rawNetlist = JSON.parse(fs.readFileSync(netlistPath, "utf-8"));
+        const modules = rawNetlist.modules || {};
+        const topModObj = modules[topModule] || Object.values(modules)[0];
+
+        if (topModObj) {
+          const cells = [];
+          const ports = [];
+
+          for (const [pName, pObj] of Object.entries(topModObj.ports || {})) {
+            ports.push({
+              name: pName,
+              direction: pObj.direction,
+              bits: pObj.bits || []
+            });
+          }
+
+          let cellIdx = 0;
+          for (const [cName, cObj] of Object.entries(topModObj.cells || {})) {
+            let type = "LUT";
+            const rawType = (cObj.type || "").toLowerCase();
+            if (rawType.includes("dff") || rawType.includes("flop")) type = "FF";
+            else if (rawType.includes("ram") || rawType.includes("bram")) type = "BRAM";
+            else if (rawType.includes("dsp") || rawType.includes("mul")) type = "DSP";
+            else if (rawType.includes("lut")) type = "LUT";
+            else if (rawType.includes("buf") || rawType.includes("io")) type = "IO";
+            else type = "GATE";
+
+            const regionX = cellIdx % 2;
+            const regionY = Math.floor((cellIdx % 8) / 4);
+            const clockRegion = `X${regionX}Y${regionY + 1}`;
+
+            const sliceX = cellIdx % 10;
+            const sliceY = Math.floor(cellIdx / 10);
+
+            cells.push({
+              id: cName,
+              name: cName,
+              type,
+              rawType: cObj.type,
+              clockRegion,
+              sliceX,
+              sliceY,
+              connections: cObj.connections || {}
+            });
+
+            cellIdx++;
+          }
+
+          const placementData = {
+            topModule,
+            totalCells: cells.length,
+            ports,
+            cells,
+            clockRegions: ["X0Y1", "X1Y1", "X0Y2", "X1Y2"]
+          };
+
+          areaReport += `\n\nJSON_PLACEMENT_DATA:\n${JSON.stringify(placementData)}`;
+        }
       }
+    } catch (netErr) {
+      console.warn(`[SynthesisWorker] Failed parsing netlist placement data:`, netErr.message);
     }
 
     success = true;
@@ -241,3 +343,7 @@ function cleanupDir(dir) {
 
 // Start polling execution interval
 setInterval(pollQueue, 1000);
+
+// Recover stale jobs on startup and periodically every 60 seconds
+recoverStaleJobs();
+setInterval(recoverStaleJobs, 60000);

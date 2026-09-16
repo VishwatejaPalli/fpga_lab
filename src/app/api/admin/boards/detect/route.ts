@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { execSync } from "child_process";
 import { detectDevices, detectNetworkDevices } from "@/lib/fpga/detect";
 import { getSession } from "@/lib/auth/session";
+import { syncHardwareRegistry } from "@/lib/hardware/device-registry";
 
 /**
  * Mapping of IDCODE prefixes to board metadata
@@ -54,21 +54,45 @@ export async function GET(req: NextRequest) {
     // 2. Scan for Network Connected Devices (PYNQ, XVC, SSH)
     const networkDevices = await detectNetworkDevices();
 
-    // 3. Scan for Serial Ports (UART)
-    let serialPorts: string[] = [];
-    try {
-      const raw = execSync("ls /dev/ttyUSB* /dev/ttyACM* 2>/dev/null").toString();
-      serialPorts = raw.split("\n").filter(Boolean);
-    } catch (e) {
-      // Ignore errors if no ports are found
-    }
+    // 3. Scan & Sync Hardware Registry (Cameras & UART Ports)
+    const registeredDevices = await syncHardwareRegistry();
+    
+    const cameras = registeredDevices
+      .filter((d) => d.type === "camera" && d.status !== "OFFLINE")
+      .map((d) => ({
+        id: d.id,
+        deviceNode: d.deviceNode,
+        preferredPath: d.preferredPath,
+        byId: d.byId,
+        byPath: d.byPath,
+        isPersistent: d.isPersistent,
+        model: d.model,
+        manufacturer: d.manufacturer,
+        serialNumber: d.serialNumber,
+        usbBus: d.usbBus,
+        usbPort: d.usbPort,
+        status: d.status,
+        assignedBoardId: d.assignedBoardId,
+        previewUrl: `/api/admin/hardware/cameras/${d.id}/preview`,
+      }));
 
-    // 4. Scan for Camera Devices
-    let cameras: string[] = [];
-    try {
-      const raw = execSync("ls /dev/video* 2>/dev/null").toString();
-      cameras = raw.split("\n").filter(Boolean);
-    } catch (e) {}
+    const serialPorts = registeredDevices
+      .filter((d) => d.type === "uart" && d.status !== "OFFLINE")
+      .map((d) => ({
+        id: d.id,
+        deviceNode: d.deviceNode,
+        preferredPath: d.preferredPath,
+        byId: d.byId,
+        byPath: d.byPath,
+        isPersistent: d.isPersistent,
+        model: d.model,
+        manufacturer: d.manufacturer,
+        serialNumber: d.serialNumber,
+        usbBus: d.usbBus,
+        usbPort: d.usbPort,
+        status: d.status,
+        assignedBoardId: d.assignedBoardId,
+      }));
 
     return NextResponse.json({ 
       hardware: enrichedHardware, 

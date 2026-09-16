@@ -1,51 +1,30 @@
 #!/bin/bash
+set -e
+
+TOP_MODULE="${1:-main}"
+OUTPUT_FILE="$2"
+TARGET_BOARD="${3:-pynq_z2}"
+
 echo "================================================================================"
-echo "                   YOSYS RTL SYNTHESIS & NEXTPNR COMPILER LOG                  "
+echo "                   FPGA SYNTHESIS & RTL COMPILATION TOOLCHAIN                  "
 echo "================================================================================"
-echo "[Yosys 0.38] Starting synthesis process for design module: $1..."
-sleep 0.4
-echo "Executing Verilog-2005 frontend..."
-echo "Parsing Verilog input file: $1..."
-echo "Locating dependency files in workspace path..."
-echo "  Detected module dependency: rtl/baud_gen.v (elaboration success)"
-echo "  Detected module dependency: rtl/uart_tx.v (elaboration success)"
-echo "  Detected module dependency: rtl/uart_rx.v (elaboration success)"
-echo "Successfully elaborated top module 'uart_top'."
-echo ""
-sleep 0.4
-echo "Executing optimization passes..."
-echo "  Running coarse synthesis..."
-echo "  Mapping logic cell nets..."
-echo "  Mapped 14 registers, 32 LUT4 elements, 8 D-type Flip-Flops, and 4 carry buffers."
-echo "  Logic optimization successfully reduced gate overhead by 14%."
-echo ""
-sleep 0.4
-echo "[NextPNR-xc7z020] Initiating Place and Route for target board: $3..."
-echo "Loading constraints file: constraints/pynq_z2.xdc..."
-echo "  Checking clock constraints on net 'clk' (Period: 8.00ns, Freq: 125.0 MHz)..."
-echo "  Pin packing matching physical packages:"
-echo "    - Net 'clk' mapped to physical pin H16"
-echo "    - Net 'rst_n' mapped to physical pin D19"
-echo "    - Net 'tx_out' mapped to physical pin Y11"
-echo "  Routing clock tree on global buffer BUFGCTRL_X0Y0."
-echo ""
-sleep 0.4
-echo "Placing logic cells..."
-echo "  Design utilization: LUT: 32/53200 (0.06%), FF: 8/106400 (0.01%)"
-echo "  Constraints validation: All 3 physical nets mapped successfully."
-echo "  Placer completed successfully."
-echo ""
-sleep 0.4
-echo "Routing interconnect wires..."
-echo "  Worst Negative Slack (WNS): +3.128 ns (MET)"
-echo "  Total Negative Slack (TNS): 0.000 ns (MET)"
-echo "  Worst Hold Slack (WHS):     +0.187 ns (MET)"
-echo "  Routing completed successfully."
-echo ""
-sleep 0.4
-echo "[Bitgen] Writing bitstream format header..."
-echo "Writing configuration array map to target $2..."
-echo "MOCK_BITSTREAM_DATA" > "$2"
+
+if ! command -v yosys &> /dev/null; then
+    echo "[Error] Yosys open-source synthesis suite is not installed on this system."
+    echo "Please install yosys (e.g., 'apt-get install yosys' or build from source)."
+    exit 1
+fi
+
+echo "[Synthesis] Starting real Yosys RTL synthesis for module: ${TOP_MODULE}..."
+yosys -p "prep -top ${TOP_MODULE}; write_verilog synth_out.v; write_json synth_out.json"
+
+if [ -n "$OUTPUT_FILE" ]; then
+    if [ -f "synth_out.v" ]; then
+        cp "synth_out.v" "$OUTPUT_FILE"
+        echo "[Synthesis] Output netlist written to $OUTPUT_FILE"
+    fi
+fi
+
 echo "================================================================================"
-echo "[Success] Synthesis, Place & Route, and Bitstream generation completed successfully."
+echo "[Success] RTL Synthesis completed successfully."
 echo "================================================================================"

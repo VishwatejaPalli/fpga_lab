@@ -164,15 +164,32 @@ export default function Terminal({ boardId, isFullscreen }: TerminalProps) {
     };
   }, [boardId]);
 
+  const handleClear = () => {
+    if (terminalRef.current) {
+      terminalRef.current.clear();
+    }
+  };
+
   return (
-    <div className={`bg-[#0f172a] rounded-lg border border-border overflow-hidden flex flex-col ${isFullscreen ? 'h-full' : ''}`}>
-      <div className="flex items-center gap-2 px-4 py-2 bg-card border-b border-border shrink-0">
-        <div className="w-3 h-3 rounded-full bg-danger/80" />
-        <div className="w-3 h-3 rounded-full bg-warning/80" />
-        <div className="w-3 h-3 rounded-full bg-success/80" />
-        <span className="text-xs text-muted ml-2 font-medium font-mono">
-          UART Console — {boardId.slice(0, 8)}
-        </span>
+    <div className={`bg-slate-950 rounded-xl border border-border overflow-hidden flex flex-col shadow-lg ${isFullscreen ? 'h-full' : ''}`}>
+      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900 border-b border-border shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
+          <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
+          <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
+          <span className="text-xs text-slate-300 ml-2 font-medium font-mono">
+            UART Console — {boardId.slice(0, 8)}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleClear}
+            className="text-[11px] font-mono text-slate-400 hover:text-white px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors"
+            title="Clear Terminal Output"
+          >
+            Clear
+          </button>
+        </div>
       </div>
       <div ref={containerRef} className={`p-2 w-full ${isFullscreen ? 'flex-1 h-[calc(100vh-8rem)]' : 'h-60 sm:h-80'}`} />
     </div>

@@ -3,6 +3,14 @@
 import { useState, useEffect } from "react";
 import { useTheme } from "@/components/theme-provider";
 import Navbar from "@/components/navbar";
+import {
+  UserIcon,
+  LockIcon,
+  PaletteIcon,
+  BellIcon,
+  AlertCircleIcon,
+  CheckIcon,
+} from "@/components/icons";
 
 interface User {
   id: string;
@@ -32,11 +40,11 @@ export default function SettingsPage() {
   }, []);
 
   const tabs = [
-    { id: "profile", label: "Profile", icon: "👤" },
-    { id: "security", label: "Security", icon: "🔒" },
-    { id: "appearance", label: "Appearance", icon: "🎨" },
-    { id: "notifications", label: "Notifications", icon: "🔔" },
-    { id: "about", label: "About", icon: "ℹ️" },
+    { id: "profile", label: "Profile", icon: <UserIcon className="w-4 h-4" /> },
+    { id: "security", label: "Security", icon: <LockIcon className="w-4 h-4" /> },
+    { id: "appearance", label: "Appearance", icon: <PaletteIcon className="w-4 h-4" /> },
+    { id: "notifications", label: "Notifications", icon: <BellIcon className="w-4 h-4" /> },
+    { id: "about", label: "About", icon: <AlertCircleIcon className="w-4 h-4" /> },
   ] as const;
 
   return (
@@ -61,7 +69,7 @@ export default function SettingsPage() {
                       : "text-muted hover:bg-foreground/5 border border-transparent"
                   }`}
                 >
-                  <span className="text-lg">{t.icon}</span>
+                  <span>{t.icon}</span>
                   {t.label}
                 </button>
               ))}
@@ -139,7 +147,7 @@ export default function SettingsPage() {
                 <div className="border-t border-border pt-6 space-y-4">
                   <div className="flex items-center justify-between p-4 rounded-lg bg-background/50 border border-border">
                     <div>
-                      <h4 className="font-medium flex items-center gap-2">Email Verification <span className="text-success text-sm">✓ Verified</span></h4>
+                      <h4 className="font-medium flex items-center gap-2">Email Verification <span className="text-success text-sm flex items-center gap-1"><CheckIcon className="w-3.5 h-3.5" /> Verified</span></h4>
                       <p className="text-sm text-muted">Your email address has been verified.</p>
                     </div>
                   </div>
@@ -293,7 +301,7 @@ export default function SettingsPage() {
                     <div className="text-xs text-muted mt-1 uppercase tracking-wider">Reservations</div>
                   </div>
                   <div className="card p-4 text-center hover:border-primary/50 transition-colors">
-                    <div className="text-lg font-bold text-foreground mt-1">Jun '26</div>
+                    <div className="text-lg font-bold text-foreground mt-1">Jun &apos;26</div>
                     <div className="text-xs text-muted mt-1 uppercase tracking-wider">Joined</div>
                   </div>
                 </div>

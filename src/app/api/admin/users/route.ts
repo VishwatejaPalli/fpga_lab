@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import db from "@/lib/db";
-import { users } from "@/lib/db/schema";
+import { users, hwSessions } from "@/lib/db/schema";
 import { getSession } from "@/lib/auth/session";
+import { sessionEnforcer } from "@/lib/sessions/enforcer";
 import { v4 as uuid } from "uuid";
 import { hashPassword } from "@/lib/auth/password";
 import { z } from "zod";
@@ -126,6 +127,20 @@ export async function DELETE(req: NextRequest) {
       { error: "Cannot delete your own account" },
       { status: 400 }
     );
+  }
+
+  // Clean up any active sessions and release held boards before deleting user
+  const activeSessions = await db
+    .select()
+    .from(hwSessions)
+    .where(and(eq(hwSessions.userId, userId), eq(hwSessions.status, "active")));
+
+  for (const s of activeSessions) {
+    try {
+      await sessionEnforcer.endSession(s, "ended");
+    } catch (err) {
+      console.error(`[Users] Failed to clean up session ${s.id} for user ${userId}:`, err);
+    }
   }
 
   await db.delete(users).where(eq(users.id, userId));

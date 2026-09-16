@@ -31,7 +31,11 @@ function getDemoLogSequence(bitstreamName: string, boardName: string, bitstreamP
   let idcode = "0x0362D093";
   let family = "Artix-7";
 
-  if (boardName.toLowerCase().includes("nexys")) {
+  if (boardName.toLowerCase().includes("spartan")) {
+    fpgaPart = "xc3s500e-fg320";
+    idcode = "0x01c22093";
+    family = "Spartan-3E";
+  } else if (boardName.toLowerCase().includes("nexys")) {
     fpgaPart = "xc7a100tcsg324-1";
     idcode = "0x13631093";
     family = "Artix-7";

@@ -2,17 +2,20 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { AlertTriangleIcon, CheckCircleSolidIcon, WrenchIcon } from "@/components/icons";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [devLink, setDevLink] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setMessage("");
+    setDevLink("");
     setLoading(true);
 
     try {
@@ -30,6 +33,9 @@ export default function ForgotPasswordPage() {
       }
 
       setMessage(data.message || "A reset link has been sent to your email.");
+      if (data.devResetUrl) {
+        setDevLink(data.devResetUrl);
+      }
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -57,15 +63,34 @@ export default function ForgotPasswordPage() {
 
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-600 rounded-lg px-4 py-3 text-sm mb-6 flex items-center gap-3 backdrop-blur-md">
-              <span className="text-xl">⚠️</span>
-              {error}
+              <AlertTriangleIcon className="w-5 h-5 text-red-500 shrink-0" />
+              <span>{error}</span>
             </div>
           )}
 
           {message && (
-            <div className="bg-green-50 border border-green-200 text-green-700 rounded-lg px-4 py-3 text-sm mb-6 flex items-center gap-3 backdrop-blur-md">
-              <span className="text-xl">📧</span>
-              {message}
+            <div className="space-y-4 mb-6 relative z-20">
+              <div className="bg-green-50 border border-green-200 text-green-700 rounded-lg px-4 py-3 text-sm flex items-center gap-3 backdrop-blur-md">
+                <CheckCircleSolidIcon className="w-5 h-5 text-emerald-600 shrink-0" />
+                <span>{message}</span>
+              </div>
+              {devLink && (
+                <div className="bg-blue-50 border border-blue-200 p-3.5 rounded-xl text-xs space-y-2">
+                  <div className="font-semibold text-blue-900 flex items-center gap-1.5">
+                    <WrenchIcon className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Dev Local Testing Shortcut</span>
+                  </div>
+                  <p className="text-slate-600 text-[11px]">
+                    SMTP server is unconfigured locally. Use this reset link to continue:
+                  </p>
+                  <Link
+                    href={devLink}
+                    className="inline-block text-blue-600 font-bold hover:underline break-all"
+                  >
+                    Open Reset Password Page →
+                  </Link>
+                </div>
+              )}
             </div>
           )}
 

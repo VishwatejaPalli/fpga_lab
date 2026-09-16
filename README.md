@@ -16,17 +16,18 @@ A full-stack web application that lets students and researchers remotely program
 - **Remote FPGA Programming** — Upload bitstreams and program any supported FPGA board via openFPGALoader
 - **Live UART Terminal** — Real-time serial console over WebSocket with keyboard input
 - **SSH Terminal** — Full SSH sessions to network-connected SoC boards (e.g. PYNQ-Z2)
-- **Camera Feed** — MJPEG video stream of the physical board (LEDs, switches, displays)
+- **Camera Feed** — Low-latency physical video stream via MediaMTX over RTSP and WebRTC
 - **Virtual I/O** — Software switches, buttons, and LED indicators for board interaction
 - **Session Management** — Time-limited exclusive access per board with auto-cleanup and FPGA reset
 - **Board Agnostic** — Supports 200+ boards via openFPGALoader (Xilinx, Intel/Altera, Lattice, Gowin, etc.)
 
 ### Online Verilog IDE & Cloud Synthesis
-- **Monaco Editor** — Full VS Code-quality Verilog/SystemVerilog editor in the browser with syntax highlighting
+- **Monaco Editor** — Full VS Code-quality Verilog/SystemVerilog/VHDL editor in the browser with syntax highlighting
 - **Multi-File Projects** — Tabbed editor with RTL and testbench file management
 - **Example Projects** — Built-in starter templates (UART TX, Blinky, Counters)
 - **Cloud Synthesis** — Server-side RTL synthesis via **Yosys** → **NextPNR** → bitstream generation
-- **Waveform Simulation** — Automatic testbench simulation via **Icarus Verilog** with VCD output
+- **VCD Waveform Viewer** — Interactive in-browser digital trace inspection with square pulses, bus envelopes, time cursor sampling, and radix switching (HEX/BIN/DEC)
+- **Waveform Simulation** — Automatic testbench simulation via **Icarus Verilog** and **GHDL** with VCD output
 - **Synthesis Reports** — Schematic diagrams (SVG), timing analysis, resource utilization, and power estimation
 - **One-Click Deploy** — Synthesized bitstreams can be directly programmed onto connected boards
 
@@ -512,12 +513,18 @@ fpga_lab/
 │       ├── hardware/
 │       │   ├── uart.ts          # Serial port service
 │       │   ├── ssh.ts           # SSH connection service
-│       │   ├── camera.ts        # MJPEG camera service
-│       │   ├── pynq-telemetry.ts # PYNQ board monitoring
-│       │   └── board-health.ts  # Board health monitor
+│       │   ├── camera.ts        # MediaMTX camera streaming service
+│       │   ├── connection-manager.ts # Pooled SSH client manager with in-flight deduplication
+│       │   ├── device-registry.ts # Hardware node & serial device discovery
+│       │   ├── pynq-discovery.ts # mDNS / ARP / IP detection for PYNQ boards
+│       │   ├── pynq-telemetry.ts # Real PYNQ die temp, CPU & frequency monitoring
+│       │   └── board-health.ts  # Multi-stage TCP and command diagnostics
+│       ├── server/
+│       │   ├── ws-handlers.ts   # WebSocket streaming handlers (UART, SSH, Camera, Logs)
+│       │   ├── websocket-auth.ts # WebSocket session verification and auth
+│       │   └── jupyter-proxy.ts # Reverse proxy for on-board PYNQ Jupyter servers
 │       └── sessions/
 │           └── enforcer.ts      # Session timeout enforcer + FPGA reset
-├── data/                        # Legacy SQLite database (gitignored)
 └── uploads/                     # User uploads & synthesis workspaces (gitignored)
 ```
 

@@ -29,25 +29,64 @@ This guide details how to configure a **TUL PYNQ-Z2 (Zynq-7000)** board for inte
 
 ---
 
-### Step 2: Register Board in FPGA Lab Admin Panel
+### Step 2: Register Board in FPGA Lab Platform
 
+You can register the board via the **CLI command** or through the **Admin Web UI**:
+
+#### Option A: One-Command CLI Registration (Recommended)
+Run the automated board registration script directly from the repository root:
+
+```bash
+npx tsx scripts/register-board.ts --ip 192.168.171.108 --name "PYNQ-Z2 Remote Lab Board"
+```
+
+#### Option B: Admin Web UI Registration
 1. Log into the FPGA Remote Lab as an **Admin** user.
 2. Navigate to the **Admin Dashboard** (`/admin`).
 3. Click **Add New FPGA Board** and enter the following parameters:
 
 ```text
-Board Name:            PYNQ-Z2 Board #01
+Board Name:            PYNQ-Z2 Remote Lab Board
 Board Type:            pynq-z2
 FPGA Family:           xc7z020clg400-1 (Zynq-7000)
-IP Address:            192.168.1.105 (Replace with actual board IP)
+IP Address:            192.168.171.108
 SSH Username:          xilinx
 SSH Password:          xilinx
-Connection Type:       ethernet
+Connection Type:       network
 Session Timeout (min): 30
-Capabilities:          led, switches, uart, camera, display
+Capabilities:          led, switches, uart, camera, ethernet
 ```
 
 4. Save the board configuration. The platform will automatically verify connectivity.
+
+---
+
+### Step 3: Enable Global Access From Anywhere (Public Tunnel Setup)
+
+To access the FPGA platform and its connected boards (`192.168.171.108`) from anywhere on the internet:
+
+#### Option A: Ngrok Tunnel (Fastest)
+1. Install Ngrok or set your authtoken in `.env.local`:
+   ```env
+   NGROK_AUTHTOKEN="your_ngrok_authtoken"
+   NGROK_DOMAIN="your-domain.ngrok-free.app" # optional static domain
+   ```
+2. Start the tunnel:
+   ```bash
+   ngrok http 3000
+   ```
+3. Update `NEXT_PUBLIC_APP_URL` in `.env.local` to match your public Ngrok URL:
+   ```env
+   NEXT_PUBLIC_APP_URL="https://your-domain.ngrok-free.app"
+   ```
+
+#### Option B: Cloudflare Tunnel (Free & Production Ready)
+1. Install Cloudflared: `sudo apt install cloudflared`
+2. Start a Quick Tunnel:
+   ```bash
+   cloudflared tunnel --url http://localhost:3000
+   ```
+3. Copy the generated `https://<subdomain>.trycloudflare.com` URL and set `NEXT_PUBLIC_APP_URL` in `.env.local`.
 
 ---
 
@@ -96,7 +135,8 @@ When a student clicks **Launch Jupyter** from the dashboard (`/pynq/<boardId>`):
 
 | Stage              | Issue                     | Resolution                                                        |
 | :------------------| :-------------------------| :-----------------------------------------------------------------|
-|`SSH_CONNECT`       | SSH Connection Timed Out  | Check Ethernet cable & verify IP with `ping <board-ip>`           |
+|`SSH_CONNECT`       | SSH Connection Timed Out  | 1. Ensure PYNQ board power switch (SW7) is ON & DONE LED (LD13) is GREEN.<br>2. Check Ethernet cable connection.<br>3. Verify IP connectivity: `ping 192.168.171.108`. If IP changed, update via `npx tsx scripts/register-board.ts --ip <new-ip>`.<br>4. For testing without physical board, set `ENABLE_MOCK_HARDWARE=true` in `.env.local`. |
 |`DISK_SPACE`        | Free Space Below 500 MB   | Clear old temporary files on board: `rm -rf /tmp/*`               |
 |`JUPYTER_API`       | Jupyter API Not Responding| Restart Jupyter service on board: `sudo systemctl restart jupyter`|
 |`BOARD_RESERVATION` | Board Busy                | End existing active session from Dashboard or Admin Panel         |
+

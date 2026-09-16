@@ -9,6 +9,8 @@ import { encrypt, decryptSafe } from "@/lib/auth/crypto";
 
 const boardSchema = z.object({
   name: z.string().min(1),
+  macAddress: z.string().optional(),
+  hostname: z.string().optional(),
   fpgaFamily: z.string().min(1),
   boardType: z.string().min(1),
   connectionType: z.enum(["jtag", "network", "usb"]).default("jtag"),
@@ -16,6 +18,10 @@ const boardSchema = z.object({
   ipAddress: z.string().optional(),
   serialPort: z.string().optional(),
   cameraDevice: z.string().optional(),
+  cameraDeviceId: z.string().optional(),
+  uartDeviceId: z.string().optional(),
+  jtagDeviceId: z.string().optional(),
+  mappingStatus: z.enum(["UNMAPPED", "PENDING_VERIFICATION", "VERIFIED", "DEGRADED", "NEEDS_REVALIDATION"]).optional(),
   boardImageUrl: z.string().optional(),
   blankBitstreamPath: z.string().optional(),
   programmingTool: z.string().default("openFPGALoader"),
@@ -66,6 +72,8 @@ export async function POST(req: NextRequest) {
       .values({
         id,
         name: data.name,
+        macAddress: data.macAddress || null,
+        hostname: data.hostname || null,
         fpgaFamily: data.fpgaFamily,
         boardType: data.boardType,
         connectionType: data.connectionType,
@@ -73,6 +81,10 @@ export async function POST(req: NextRequest) {
         ipAddress: data.ipAddress || null,
         serialPort: data.serialPort || null,
         cameraDevice: data.cameraDevice || null,
+        cameraDeviceId: data.cameraDeviceId || null,
+        uartDeviceId: data.uartDeviceId || null,
+        jtagDeviceId: data.jtagDeviceId || null,
+        mappingStatus: data.mappingStatus || "UNMAPPED",
         boardImageUrl: data.boardImageUrl || null,
         blankBitstreamPath: data.blankBitstreamPath || null,
         programmingTool: data.programmingTool,
@@ -81,6 +93,7 @@ export async function POST(req: NextRequest) {
         capabilities: JSON.stringify(data.capabilities),
         sessionTimeoutMinutes: data.sessionTimeoutMinutes,
         status: "free",
+        connectionStatus: "ONLINE",
       });
 
     return NextResponse.json({ id, message: "Board created" }, { status: 201 });
@@ -120,6 +133,8 @@ export async function PATCH(req: NextRequest) {
     await db.update(boards)
       .set({
         name: data.name,
+        macAddress: data.macAddress || null,
+        hostname: data.hostname || null,
         fpgaFamily: data.fpgaFamily,
         boardType: data.boardType,
         connectionType: data.connectionType,
@@ -127,6 +142,10 @@ export async function PATCH(req: NextRequest) {
         ipAddress: data.ipAddress || null,
         serialPort: data.serialPort || null,
         cameraDevice: data.cameraDevice || null,
+        cameraDeviceId: data.cameraDeviceId || null,
+        uartDeviceId: data.uartDeviceId || null,
+        jtagDeviceId: data.jtagDeviceId || null,
+        mappingStatus: data.mappingStatus || undefined,
         boardImageUrl: data.boardImageUrl || null,
         blankBitstreamPath: data.blankBitstreamPath || null,
         programmingTool: data.programmingTool,

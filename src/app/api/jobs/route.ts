@@ -84,7 +84,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       );
     }
 
-    // Auto-end the user's current active session if they have one
+    // Auto-end the user's active session ONLY if it was on a different board
     const [userActiveSession] = await db
       .select()
       .from(hwSessions)
@@ -95,16 +95,14 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         )
       );
 
-    if (userActiveSession) {
+    if (userActiveSession && userActiveSession.boardId !== boardId) {
       await db.update(hwSessions)
         .set({ status: "ended" })
         .where(eq(hwSessions.id, userActiveSession.id));
 
-      if (userActiveSession.boardId && userActiveSession.boardId !== boardId) {
-        await db.update(boards)
-          .set({ status: "free" })
-          .where(eq(boards.id, userActiveSession.boardId));
-      }
+      await db.update(boards)
+        .set({ status: "free", currentSessionId: null })
+        .where(eq(boards.id, userActiveSession.boardId));
     }
 
     // Check if the board has an active session
@@ -142,12 +140,13 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
     // Prevent concurrent uploads/sessions to a board in use (unless requester is Admin or owns the active session)
     if (!isAdmin) {
-      if (
+      const isBoardInUseByOther =
         board.status === "busy" ||
         board.status === "programming" ||
-        board.status === "allocated" ||
-        (boardActiveSession && boardActiveSession.userId !== session.userId)
-      ) {
+        (board.status === "allocated" && (!boardActiveSession || boardActiveSession.userId !== session.userId)) ||
+        (boardActiveSession && boardActiveSession.userId !== session.userId);
+
+      if (isBoardInUseByOther) {
         return NextResponse.json(
           { error: "Board is currently in use by another session or programming job." },
           { status: 409 }
