@@ -3,9 +3,13 @@ import { scanVideoDevices, scanSerialDevices, syncHardwareRegistry } from "../sr
 import { runMigrations } from "../src/lib/db/migrate";
 
 describe("Hardware Registry & Identity Management Tests", () => {
+  const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
+
   beforeAll(async () => {
     process.env.ENABLE_MOCK_HARDWARE = "true";
-    await runMigrations();
+    if (hasDatabaseUrl) {
+      await runMigrations();
+    }
   });
   it("should scan and return video devices with persistent paths and fingerprints", () => {
     const cameras = scanVideoDevices();
@@ -40,6 +44,8 @@ describe("Hardware Registry & Identity Management Tests", () => {
   });
 
   it("should synchronize discovered hardware into the database registry", async () => {
+    if (!hasDatabaseUrl) return;
+
     const synced = await syncHardwareRegistry();
     expect(synced.length).toBeGreaterThan(0);
 
