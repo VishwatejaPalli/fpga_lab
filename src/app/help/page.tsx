@@ -190,7 +190,7 @@ export default function HelpPage() {
             </div>
 
             <div className="bg-slate-900/80 border border-slate-800 rounded-lg p-3 font-mono text-xs text-slate-300">
-              <div className="text-slate-500 mb-1">// Example testbench VCD dump snippet for simulation:</div>
+              <div className="text-slate-500 mb-1">{"// Example testbench VCD dump snippet for simulation:"}</div>
               <div>initial begin</div>
               <div className="pl-4 text-emerald-400">$dumpfile(&quot;waves.vcd&quot;);</div>
               <div className="pl-4 text-emerald-400">$dumpvars(0, tb_counter);</div>
