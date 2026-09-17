@@ -222,7 +222,10 @@ export default function WaveformView({
 
   // Keep cursor within bounds on data change
   useEffect(() => {
-    if (cursorTime > maxTime) setCursorTime(0);
+    if (cursorTime > maxTime) {
+      const timer = setTimeout(() => setCursorTime(0), 0);
+      return () => clearTimeout(timer);
+    }
   }, [maxTime, cursorTime]);
 
   if (!waves || signals.length === 0) {
@@ -250,7 +253,7 @@ export default function WaveformView({
             Run a behavioral simulation on your Verilog or VHDL testbench. Signals will be plotted with interactive time cursors and radix inspection.
           </p>
           <div className="bg-[#111827] border border-slate-800 rounded-lg p-3 text-left max-w-sm mb-6 font-mono text-[11px] text-slate-400">
-            <div className="text-slate-500">// Testbench snippet:</div>
+            <div className="text-slate-500">{"// Testbench snippet:"}</div>
             <div>initial begin</div>
             <div className="pl-4 text-emerald-400">$dumpfile(&quot;waves.vcd&quot;);</div>
             <div className="pl-4 text-emerald-400">$dumpvars(0, tb_module);</div>

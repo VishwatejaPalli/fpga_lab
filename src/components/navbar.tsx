@@ -101,10 +101,7 @@ export default function Navbar() {
 
   // Session timer ticker
   useEffect(() => {
-    if (!activeSession?.expiresAt) {
-      setTimeRemaining("");
-      return;
-    }
+    if (!activeSession?.expiresAt) return;
 
     function updateCountdown() {
       const now = Date.now();
